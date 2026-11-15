@@ -1,11 +1,11 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Assessment, Technique } from '../types'
-import { aggregate, readTurns } from '../src/reflect/read'
+import { aggregate, readTraceFiles, readTurns } from '../src/reflect/read'
 import { progressReport, toOtlp } from '../src/reflect/export'
 import { recordDay } from '../src/reflect/stats'
 import type { ReadIo, TurnRecord } from '../src/reflect/read'
-import { NOTHING_IN_SESSION, NOTHING_IN_WEEK, SESSION_FALLBACK } from '../src/reflect/review'
+import { NOTHING_IN_SESSION, NOTHING_IN_WEEK, SESSION_FALLBACK, renderFew } from '../src/reflect/review'
 import { defaultConfig } from './helpers'
 import type { KitOn } from './helpers'
 
@@ -101,15 +101,16 @@ test('review falls back to plain text when the model fails', async ($, on) => {
       'handhold.rewrite': 'the three decisions',
     },
   })
-  const file = `${root}\n${assess}\n`
+  // Five distinct prompts, so the review is past the small-sample threshold and asks the model.
+  const fileFor = (path: string) => `${root.replace('"qbr"', JSON.stringify(`qbr ${path}`))}\n${assess}\n`
 
   on('env.get', () => ({ value: '/home/t' }))
   on('session.id', () => ({ value: 's1' }))
   on('ui.log', () => ({ value: undefined }))
   on('fs.list', () => ({
-    value: [{ name: '00001-t1.jsonl', kind: 'file', size: 0, mtimeMs: 0, isLink: false }],
+    value: [1, 2, 3, 4, 5].map(i => ({ name: `0000${i}-t${i}.jsonl`, kind: 'file', size: 0, mtimeMs: 0, isLink: false })),
   }))
-  on('fs.read', () => ({ value: file }))
+  on('fs.read', (_, e) => ({ value: fileFor(e.path) }))
   on('model.complete', () => {
     throw new Error('timeout')
   })
@@ -339,7 +340,7 @@ test('review falls back to the week when nothing in this session needed coaching
   twoSessions(on, { s1: false, s2: true })
   const text = await runReview($ as never, '')
   expect(text).toContain(SESSION_FALLBACK)
-  expect(text).toContain('Altitude')
+  expect(text).toContain('Try: the three decisions')
 })
 
 test('review says why when nothing in the week needed coaching either', async ($, on) => {
@@ -350,4 +351,54 @@ test('review says why when nothing in the week needed coaching either', async ($
 test('an explicit session review does not fall back, and points at week', async ($, on) => {
   twoSessions(on, { s1: false, s2: true })
   expect(await runReview($ as never, 'session')).toContain(NOTHING_IN_SESSION)
+})
+
+test('aggregate counts a repeated request once and keeps best and worst apart', () => {
+  const t = (id: string, prompt: string, sc: [number, number, number]) => ({ ...turn(id, assessment(sc, 'goal-beyond-the-goal')), prompt })
+  const agg = aggregate([t('1', 'Update the QBR', [0, 0, 0]), t('2', 'update  the qbr', [0, 0, 0]), t('3', 'plan launch', [2, 1, 1])])
+  expect(agg.warranted).toBe(2)
+  expect(agg.best.length).toBe(0)
+  expect(agg.worst.length).toBe(2)
+})
+
+test('a small sample gets one suggestion per turn, not a reflection', () => {
+  const agg = aggregate([turn('1', assessment([1, 0, 0], 'goal-beyond-the-goal'))])
+  const text = renderFew(agg)
+  expect(text).toContain('Only 1 turn so far')
+  expect(text).toContain('Try: the more ambitious version')
+})
+
+test('readTraceFiles skips forgotten sessions and turns', async () => {
+  const root = JSON.stringify({ spanId: 'b'.repeat(16), name: 'invoke_agent claude', startTimeUnixNano: '1000000000000', attributes: {} })
+  const io: ReadIo = {
+    home: async () => '/home/t',
+    list: async path =>
+      path.endsWith('/traces')
+        ? ['s1', 's2', 's3'].map(name => ({ name, kind: 'dir' as const, mtimeMs: 0 }))
+        : ['00001-a.jsonl', '00002-b.jsonl'].map(name => ({ name, kind: 'file' as const, mtimeMs: Date.now() })),
+    read: async path =>
+      path.endsWith('forgotten.json') ? JSON.stringify({ sessions: ['s2'], turns: ['s3/00001-a.jsonl'] }) : `${root}\n`,
+  }
+  const files = await readTraceFiles(io, defaultConfig, { sinceMs: 0 })
+  expect(files.map(f => `${f.sessionId}/${f.fileName}`)).toEqual(['s1/00001-a.jsonl', 's1/00002-b.jsonl', 's3/00002-b.jsonl'])
+})
+
+test('/handhold forget records the session, and refuses an id that matches nothing', async ($, on) => {
+  let saved = ''
+  twoSessions(on, { s1: false, s2: true })
+  on('fs.write', (_, e) => {
+    saved = e.text
+    return { value: undefined }
+  })
+  const run = async (args: string) =>
+    ((await ($ as never as { command: { run(x: unknown): Promise<unknown> } }).command.run({
+      command: 'handhold',
+      args,
+      origin: { kind: 'composer' },
+    })) as { text: string }).text
+
+  expect(await run('forget nosuchsession')).toContain('No session matches')
+  expect(saved).toBe('')
+  expect(await run('forget')).toContain('Forgot session s1')
+  expect(JSON.parse(saved).sessions).toEqual(['s1'])
 })

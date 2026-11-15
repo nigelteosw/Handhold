@@ -91,8 +91,27 @@ export async function traceRoot(io: Pick<ReadIo, 'home'>, cfg: Config): Promise<
   return cfg.traceRoot.replace(/^~(?=\/|$)/, home)
 }
 
+// What /handhold forget has dropped: whole sessions, and single turns as "<session>/<file>". Kept in the trace
+// folder because plugins cannot delete files; every reader skips what it lists.
+export type Forgotten = { sessions: string[]; turns: string[] }
+
+export const FORGOTTEN_FILE = 'forgotten.json'
+
+export async function readForgotten(io: ReadIo, root: string): Promise<Forgotten> {
+  try {
+    const raw = JSON.parse(await io.read(`${root}/${FORGOTTEN_FILE}`)) as Partial<Forgotten>
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+    return { sessions: strings(raw.sessions), turns: strings(raw.turns) }
+  } catch {
+    return { sessions: [], turns: [] }
+  }
+}
+
 export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Promise<TraceFile[]> {
   const root = await traceRoot(io, cfg)
+  const forgotten = await readForgotten(io, root)
+  const skipSession = new Set(forgotten.sessions)
+  const skipTurn = new Set(forgotten.turns)
 
   let sessions: string[] = []
   if ('sessionId' in scope) {
@@ -107,6 +126,7 @@ export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Pro
 
   const files: TraceFile[] = []
   for (const sessionId of sessions) {
+    if (skipSession.has(sessionId)) continue
     let entries: { name: string; mtimeMs: number }[] = []
     try {
       entries = (await io.list(`${root}/${sessionId}`)).filter(e => e.kind === 'file' && e.name.endsWith('.jsonl'))
@@ -115,6 +135,7 @@ export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Pro
     }
     for (const entry of entries) {
       if ('sinceMs' in scope && entry.mtimeMs < scope.sinceMs) continue
+      if (skipTurn.has(`${sessionId}/${entry.name}`)) continue
       let text: string
       try {
         text = await io.read(`${root}/${sessionId}/${entry.name}`)
@@ -154,10 +175,17 @@ export async function readTurns(io: ReadIo, cfg: Config, scope: Scope): Promise<
   return turnsOf(await readTraceFiles(io, cfg, scope))
 }
 
+// Two prompts are the same request when they match after case and whitespace.
+export const samePrompt = (p: string): string => p.trim().replace(/\s+/g, ' ').toLowerCase()
+
 export function aggregate(turns: TurnRecord[]): Aggregate {
-  const judged = turns
-    .map(t => ({ turn: t, a: t.assess.post ?? t.assess.pre }))
-    .filter((x): x is { turn: TurnRecord; a: Assessment } => x.a !== undefined && x.a.warranted)
+  // A request asked more than once counts once, by its latest judgement (turns arrive oldest first).
+  const byPrompt = new Map<string, { turn: TurnRecord; a: Assessment }>()
+  for (const t of turns) {
+    const a = t.assess.post ?? t.assess.pre
+    if (a?.warranted) byPrompt.set(samePrompt(t.prompt), { turn: t, a })
+  }
+  const judged = [...byPrompt.values()]
 
   const dims: Dimension[] = ['altitude', 'depth', 'range']
   const avg = Object.fromEntries(
@@ -176,7 +204,8 @@ export function aggregate(turns: TurnRecord[]): Aggregate {
     warranted: judged.length,
     avg,
     missed,
-    best: bySum.slice(0, 3).map(x => x.turn),
+    // The weakest come first; the strongest are drawn from the rest, so no turn is in both.
     worst: [...bySum].reverse().slice(0, 3).map(x => x.turn),
+    best: bySum.slice(0, Math.max(0, Math.min(3, bySum.length - 3))).map(x => x.turn),
   }
 }
