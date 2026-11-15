@@ -10,7 +10,11 @@ import { scoreUnscored } from './score'
 
 const DAY_MS = 7 * 24 * 60 * 60 * 1000
 
-const REFLECT_SYSTEM = `You help a person reflect on how ambitiously they worked with an AI assistant, using three dimensions: Altitude (aim at the outcome, not the task), Depth (work the way a field-leading expert would), Range (draw on other fields by their real methods). Write for the person, in plain prose, under these four headings: **Patterns** (what they most often miss, grounded in the techniques given), **Best moments** (the three strongest turns, briefly), **Try next time** (three before-and-after rewrites, using their own prompts), **Trend** (how their scores moved). Be specific and brief.`
+const REFLECT_SYSTEM = `You help a person reflect on how ambitiously they worked with an AI assistant, using three dimensions: Altitude (aim at the outcome, not the task), Depth (work the way a field-leading expert would), Range (draw on other fields by their real methods). Write for the person, in plain prose, under these headings: **Patterns** (what they most often miss, grounded in the techniques given), **Best moments** (up to three of the strongest turns, briefly), **Try next time** (up to three before-and-after rewrites, using their own prompts), **Trend** (how their scores moved).
+Rules: use only the turns you are given, and never use the same turn in two places. Leave out a heading when there is nothing real to put under it. Never invent context the prompts do not state (a role, a team, a data source, a deadline): a rewrite may add only what the person plausibly meant. Be specific and brief.`
+
+// Below this many distinct turns worth coaching, a reflection has too little to find patterns in.
+export const MIN_REFLECT = 5
 
 const pair = (t: TurnRecord): string => {
   const a = t.assess.post ?? t.assess.pre
@@ -36,6 +40,20 @@ export function renderAggregate(agg: Aggregate): string {
     lines.push(`Most missed: ${agg.missed.map(m => `${techniqueLabel(m.technique)} (${m.count})`).join(', ')}`)
   }
   for (const t of agg.worst) lines.push(`Try: "${t.prompt}" → "${(t.assess.post ?? t.assess.pre)?.rewrite ?? ''}"`)
+  return lines.join('\n')
+}
+
+// The review for a small sample: each turn's own suggestion from the judge, with no review-model call.
+export function renderFew(agg: Aggregate): string {
+  const n = agg.warranted
+  const lines = [
+    `Only ${n} turn${n === 1 ? '' : 's'} so far needed coaching. Handhold needs about ${MIN_REFLECT} before patterns mean anything, so for now here is one suggestion per turn:`,
+  ]
+  for (const t of agg.worst) {
+    const a = t.assess.post ?? t.assess.pre
+    const prompt = t.prompt.length > 120 ? `${t.prompt.slice(0, 120)}…` : t.prompt
+    lines.push(`- "${prompt}"${a?.rewrite ? `\n  Try: ${a.rewrite}` : ''}`)
+  }
   return lines.join('\n')
 }
 
@@ -84,22 +102,23 @@ export async function review($: Engine, cfg: Config, args: string): Promise<{ te
   let isWeek = word === 'week'
   let run = await scoreScope($, cfg, io, sessionId, isWeek ? weekScope : { sessionId })
   let agg = aggregate(turnsOf(run.files))
-  const notes: string[] = []
+  let scoredTotal = run.scored
+  let fellBack = false
 
   if (!isWeek && word === '' && agg.warranted === 0) {
-    const first = scoringLine(run.scored, run.left)
-    if (first) notes.push(first)
     isWeek = true
     run = await scoreScope($, cfg, io, sessionId, weekScope)
     agg = aggregate(turnsOf(run.files))
-    if (agg.warranted > 0) notes.push(SESSION_FALLBACK)
+    scoredTotal += run.scored
+    fellBack = agg.warranted > 0
   }
-  const line = scoringLine(run.scored, run.left)
-  if (line) notes.push(line)
+  // One line for all the scoring done, however many scopes it took.
+  const notes = [scoringLine(scoredTotal, run.left), fellBack ? SESSION_FALLBACK : ''].filter(n => n !== '')
   const withHeader = (body: string) => [...notes, body].join('\n\n')
 
   if (run.files.length === 0 && notes.length === 0) return { text: 'No turns recorded yet.' }
   if (agg.warranted === 0) return { text: withHeader(isWeek ? NOTHING_IN_WEEK : NOTHING_IN_SESSION) }
+  if (agg.warranted < MIN_REFLECT) return { text: withHeader(renderFew(agg)) }
   try {
     const reply = await $.model.complete({
       model: cfg.reviewModel,

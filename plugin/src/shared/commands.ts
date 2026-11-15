@@ -2,6 +2,7 @@ import type { EngineInterface as Engine, On } from 'claude-code'
 
 import type { Config } from './config'
 import { exportCmd } from '../reflect/export'
+import { forgetCmd } from '../reflect/forget'
 import { historyCmd } from '../reflect/history'
 import { openPane } from '../reflect/pane'
 import { review } from '../reflect/review'
@@ -9,7 +10,7 @@ import { setQuiet } from '../nudge/note'
 import { fallThrough } from './safe'
 
 export const USAGE =
-  'Usage: /handhold review [session|week] | history [session|week|all] | export [--otlp] [--report <path>] | quiet [off] | pane'
+  'Usage: /handhold review [session|week] | history [session|week|all] | export [--otlp] [--report <path>] | forget [session|last|<session id>] | quiet [off] | pane'
 
 // Routes /handhold by its first word. Each word calls its own function with the engine's $ directly.
 export async function route($: Engine, cfg: Config, args: string): Promise<{ text: string }> {
@@ -23,6 +24,7 @@ export async function route($: Engine, cfg: Config, args: string): Promise<{ tex
   }
   if (word === 'review') return review($, cfg, tail)
   if (word === 'history') return historyCmd($, cfg, tail)
+  if (word === 'forget') return forgetCmd($, cfg, tail)
   if (word === 'export') return exportCmd($, cfg, tail)
   if (word === 'pane') return openPane($)
   return { text: USAGE }

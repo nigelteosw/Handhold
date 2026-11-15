@@ -3,7 +3,7 @@ import { assessAttrs } from '../mentor/assessment'
 import { isTrivial } from '../mentor/gate'
 import { msToNano, newSpanId, SCHEMA_URL } from '../capture/otel'
 import type { Config } from '../shared/config'
-import { toTurnRecord, traceRoot } from './read'
+import { samePrompt, toTurnRecord, traceRoot } from './read'
 import type { ReadIo, TraceFile, TurnRecord } from './read'
 
 export type ScoreIo = ReadIo & { write(path: string, text: string): Promise<void> }
@@ -56,12 +56,16 @@ export async function scoreUnscored(
   const batch = pending.slice(0, Math.max(1, Math.floor(cfg.reviewBatch)))
   if (batch.length === 0) return { scored: [], left: 0 }
 
-  const results = await judge(batch.map((x, i) => ({ id: String(i + 1), prompt: x.turn.prompt })))
+  // A request asked more than once is judged once, and that score is saved on every copy.
+  const unique = [...new Set(batch.map(x => samePrompt(x.turn.prompt)))]
+  const idOf = new Map(unique.map((key, i) => [key, String(i + 1)]))
+  const prompts = new Map(batch.map(x => [samePrompt(x.turn.prompt), x.turn.prompt]))
+  const results = await judge(unique.map(key => ({ id: idOf.get(key)!, prompt: prompts.get(key)! })))
   const root = await traceRoot(io, cfg)
   const scored: Scored[] = []
 
-  for (const [i, x] of batch.entries()) {
-    const a = results.get(String(i + 1))
+  for (const x of batch) {
+    const a = results.get(idOf.get(samePrompt(x.turn.prompt))!)
     if (!a) continue
     const span = reviewSpan(x.file.spans, a, nowMs)
     if (!span) continue

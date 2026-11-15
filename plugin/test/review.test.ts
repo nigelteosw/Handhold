@@ -133,6 +133,18 @@ test('scoreUnscored makes no call when everything is scored', async () => {
   expect(r).toEqual({ scored: [], left: 0 })
 })
 
+test('scoreUnscored judges a repeated prompt once and saves the score on every copy', async () => {
+  const files = [fileOf(1, 'Update the numbers in our QBR template'), fileOf(2, 'update the numbers in  our QBR template')]
+  const sent: string[][] = []
+  const r = await scoreUnscored(memoryIo(files), defaultConfig, files, async items => {
+    sent.push(items.map(i => i.id))
+    return new Map(items.map(i => [i.id, qbrAssessment]))
+  })
+  expect(sent).toEqual([['1']])
+  expect(r.scored.length).toBe(2)
+  expect(r.left).toBe(0)
+})
+
 test('parseBatch keeps the elements that parse and skips the rest', () => {
   const reply = `Here you go:\n[${JSON.stringify({ id: 1, ...qbrAssessment })}, {"id": "2", "warranted": false}, {"id": "3", "scores": 7}]`
   const m = parseBatch(reply)
