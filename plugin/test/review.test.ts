@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import type { Assessment, Span } from '../types'
 import { parseBatch } from '../src/mentor/judge'
-import { embedJson, historyDataJs, historyHtml, historyTurn, LIVE_FOR_MS, parseLive, scopeOf, wordOf } from '../src/reflect/history'
+import { embedJson, historyDataJs, historyHtml, historySummary, historyTurn, LIVE_FOR_MS, parseLive, scopeOf, wordOf } from '../src/reflect/history'
 import type { TraceFile } from '../src/reflect/read'
 import { scoringLine } from '../src/reflect/review'
 import { scoreUnscored } from '../src/reflect/score'
@@ -177,6 +177,27 @@ test('historyTurn summarises a turn without tool arguments or results', () => {
   expect(t?.tools).toEqual([{ name: 'Bash', ms: 1500, ok: true }])
   expect(JSON.stringify(t)).not.toContain('TOPSECRET')
   expect(t?.assess).toBeNull()
+})
+
+test('the history summary for the chat counts turns and shows the latest suggestion', () => {
+  const a = JSON.parse(qbr.judgeReply) as Assessment
+  const plain = historyTurn(fileOf(1, 'merge it'))
+  const coached = historyTurn(fileOf(2, qbr.prompt))
+  if (!plain || !coached) throw new Error('fixture')
+  const turns = [
+    { ...plain, startMs: 1 },
+    { ...coached, startMs: 2, assess: { ...a, techniqueLabel: 'Aim at the goal behind the request' } },
+  ]
+  const text = historySummary(turns, 'Last 30 days')
+
+  expect(text).toContain('Last 30 days: 2 turns, 1 scored.')
+  expect(text).toContain(`Latest suggestion, for "${qbr.prompt}"`)
+  expect(text).toContain(`Try: ${a.rewrite}`)
+  expect(text).toContain('to work on: Aim at the goal behind the request')
+  // Newest first, each with what came of it.
+  expect(text.indexOf(qbr.prompt.slice(0, 20))).toBeLessThan(text.indexOf('merge it'))
+  expect(text).toContain('"merge it" · not scored')
+  expect(historySummary([], 'This session')).toBe('This session: no turns recorded yet.')
 })
 
 test('the history page cannot be broken out of by a prompt', () => {

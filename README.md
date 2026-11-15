@@ -12,9 +12,9 @@ Handhold scores each request on these three, nudges Claude to offer the more amb
 
 - **Claude Code** in the terminal and IDE extensions: supported.
 - **Claude desktop app, Claude Code session**: loads through `CLAUDE_CODE_PLUGIN_DIRS`. Checked in headless runs only; the interactive desktop check is still open.
-- **Claude desktop app, chat with plugins**: the `/` menu there lists only skills, never a command a plugin registers while it runs, so `/handhold` doesn't appear. Use `/review`, `/history` and `/forget` there instead. These skills call Handhold through its `mcp__handhold__handhold` tool. If Handhold's code isn't running in that app, they say so instead of guessing.
-- **Cowork mode**: not yet verified.
-- **The claude.ai chat tab** (web or desktop): not supported. Local plugins cannot reach it.
+- **Claude desktop app, where plugins run with a skills-only `/` menu**: that menu never shows a command a plugin registers while it runs, so `/handhold` doesn't appear. Use the skills `/review`, `/history` and `/forget` instead; they call Handhold through its `mcp__handhold__handhold` tool. `/history` puts a summary in the chat as well as writing the page, because a browser may not open from there.
+- **Cowork mode**: not yet verified. Its sessions may run in a sandbox with their own trace folder, apart from the terminal's.
+- **The Chat tab** (claude.ai on the web, or the desktop app's Chat tab): not supported. Handhold's code and its skills don't load there, so `/history` typed in Chat is plain text: Claude will improvise an answer from memory, not from your traces. Use Claude Code (terminal or the desktop app's Code tab) for Handhold.
 
 ## Install from GitHub
 
@@ -45,7 +45,7 @@ For sessions that cannot take a flag (for example the desktop app), set `CLAUDE_
 |---|---|
 | `/handhold review [session\|week]` | Scores the turns in scope that haven't been scored yet (one Haiku call), then reflects on them (one Opus call): patterns, best moments, three before-and-after rewrites, and the trend. Requests asked more than once count once. With fewer than 5 distinct turns worth coaching it skips the reflection and shows each turn's own suggestion instead. Defaults to this session, and falls back to the last 7 days when nothing in the session needed coaching; `week` covers the last 7 days across sessions. |
 | `/handhold forget [session\|last\|<session id>]` | Drops a test run or a stray turn from reviews, history and exports. With no argument it forgets this session; `last` forgets this session's last turn. Plugins can't delete files, so the traces stay on disk and `forgotten.json` in the trace folder lists what to skip. |
-| `/handhold history [session\|week\|all]` | Writes a local page of your past turns to `~/.handhold/history.html` and opens it in your browser: prompts, answers, tools used, tokens and any scores, with search and filters. Defaults to the last 30 days. Makes no model calls. |
+| `/handhold history [session\|week\|all]` | Sums up your recent turns in the chat (counts, your latest suggestion, and what came of each recent turn), and writes a local page of them to `~/.handhold/history.html`, opening it in your browser where it can: prompts, answers, tools used, tokens and any scores, with search and filters. Defaults to the last 30 days. Makes no model calls. |
 | `/handhold pane` | Opens the progress pane: session and 7-day averages per dimension, and any techniques Handhold has stopped offering. In review mode it fills in after each `/handhold review`. |
 | `/handhold export [--otlp] [--report [path]]` | Writes an OTLP JSON file of the last 7 days of traces, and a Markdown progress report (scores and short before-and-after pairs, no transcripts) you can share. With no flags it writes both. |
 | `/handhold quiet [off]` | Mutes coaching notes for this session, or turns them back on. |
