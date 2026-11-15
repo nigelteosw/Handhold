@@ -2,8 +2,11 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Config } from '../shared/config'
 import { techniqueLabel } from '../mentor/rubric'
-import { aggregate, readIo, readTurns } from './read'
+import { judgeBatch } from '../mentor/judge'
+import { recordSessionStat } from './pane'
+import { aggregate, readIo, readTraceFiles, turnsOf } from './read'
 import type { Aggregate, TurnRecord } from './read'
+import { scoreUnscored } from './score'
 
 const DAY_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -36,25 +39,51 @@ export function renderAggregate(agg: Aggregate): string {
   return lines.join('\n')
 }
 
-// /handhold review [session|week]: reads the traces in scope, then asks the full model for a reflection.
+// What the scoring step did, for the top of the review.
+export function scoringLine(scored: number, left: number): string {
+  if (scored === 0 && left === 0) return ''
+  const more = left > 0 ? ` ${left} older turn${left === 1 ? '' : 's'} still unscored: run the review again to score them.` : ''
+  return `Scored ${scored} new turn${scored === 1 ? '' : 's'}.${more}`
+}
+
+// /handhold review [session|week]: scores the unscored turns in scope in one cheap batch call, then asks
+// the review model for a reflection. These are the only model calls Handhold makes in review mode.
 export async function review($: Engine, cfg: Config, args: string): Promise<{ text: string }> {
   const io = readIo($)
-  const scope = args.trim() === 'week' ? { sinceMs: Date.now() - 7 * DAY_MS } : { sessionId: await $.session.id() }
-  const turns = await readTurns(io, cfg, scope)
-  if (turns.length === 0) return { text: 'No turns recorded yet.' }
+  const sessionId = await $.session.id()
+  const scope = args.trim() === 'week' ? { sinceMs: Date.now() - 7 * DAY_MS } : { sessionId }
+  const files = await readTraceFiles(io, cfg, scope)
+  if (files.length === 0) return { text: 'No turns recorded yet.' }
 
-  const agg = aggregate(turns)
+  const { scored, left } = await scoreUnscored(
+    { ...io, write: (path, text) => $.fs.write(path, text) },
+    cfg,
+    files,
+    items => judgeBatch($, items, cfg),
+  )
+  for (const s of scored) {
+    try {
+      await recordSessionStat($, s.assessment, new Date(s.turn.startMs).toISOString().slice(0, 10), s.turn.sessionId === sessionId)
+    } catch {
+      // The pane's averages are a side effect: their failure never costs the review.
+    }
+  }
+  const header = scoringLine(scored.length, left)
+  const withHeader = (body: string) => (header ? `${header}\n\n${body}` : body)
+
+  const agg = aggregate(turnsOf(files))
+  if (agg.warranted === 0) return { text: withHeader('No scored turns to reflect on yet.') }
   try {
     const reply = await $.model.complete({
       model: cfg.reviewModel,
       system: REFLECT_SYSTEM,
       prompt: reviewPrompt(agg),
       maxTokens: 1200,
-      timeoutMs: 20000,
+      timeoutMs: 30000,
     })
-    if (reply.isAnswered && reply.text.trim() !== '') return { text: reply.text }
+    if (reply.isAnswered && reply.text.trim() !== '') return { text: withHeader(reply.text) }
   } catch {
     // Fall through to the plain rendering.
   }
-  return { text: renderAggregate(agg) }
+  return { text: withHeader(renderAggregate(agg)) }
 }

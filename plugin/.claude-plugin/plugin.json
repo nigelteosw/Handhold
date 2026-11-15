@@ -4,6 +4,22 @@
   "description": "A mentor that nudges you and Claude toward more ambitious work: altitude, depth, range.",
   "types": "./types/index.d.ts",
   "userConfig": {
+    "mode": {
+      "type": "string",
+      "default": "review",
+      "options": [
+        "review",
+        "live"
+      ],
+      "title": "Scoring mode",
+      "description": "review: no model calls while you work; turns are scored when you run /handhold review. live: judge every turn and show coaching notes"
+    },
+    "reviewBatch": {
+      "type": "number",
+      "default": 15,
+      "title": "Turns scored per review",
+      "description": "Most unscored turns /handhold review scores, in one call"
+    },
     "fastModel": {
       "type": "string",
       "default": "claude-haiku-5-5",

@@ -66,7 +66,7 @@ test('the brief is not added twice when it is already present', async ($, on) =>
   expect(result.sections.filter(s => s.id === 'handhold:ambition').length).toBe(1)
 })
 
-test('a trivial prompt makes no model call and adds no context', async ($, on) => {
+test('a trivial prompt makes no model call and adds no context', { options: { mode: 'live' } }, async ($, on) => {
   let calls = 0
   beneath(on, () => {
     calls++
@@ -79,7 +79,7 @@ test('a trivial prompt makes no model call and adds no context', async ($, on) =
   expect(result.context).toBeUndefined()
 })
 
-test('a low-altitude prompt gets one hint and its text is unchanged', async ($, on) => {
+test('a low-altitude prompt gets one hint and its text is unchanged', { options: { mode: 'live' } }, async ($, on) => {
   beneath(on, modelReplyFor)
 
   const result = await $.prompt.submit({ text: qbr.prompt } as never)
@@ -89,7 +89,7 @@ test('a low-altitude prompt gets one hint and its text is unchanged', async ($, 
   expect(result.context?.[0]).toContain('goal-beyond-the-goal')
 })
 
-test('a judge timeout leaves the prompt untouched', async ($, on) => {
+test('a judge timeout leaves the prompt untouched', { options: { mode: 'live' } }, async ($, on) => {
   beneath(on, () => new Error('timeout'))
 
   const result = await $.prompt.submit({ text: qbr.prompt } as never)
@@ -98,7 +98,7 @@ test('a judge timeout leaves the prompt untouched', async ($, on) => {
   expect(result.context).toBeUndefined()
 })
 
-test('two declines suppress the technique for the session', async ($, on) => {
+test('two declines suppress the technique for the session', { options: { mode: 'live' } }, async ($, on) => {
   beneath(on, modelReplyFor)
 
   await $.prompt.submit({ text: qbr.prompt } as never)
@@ -108,7 +108,7 @@ test('two declines suppress the technique for the session', async ($, on) => {
   expect(third.context).toBeUndefined()
 })
 
-test('back-to-back prompts keep their own assessment on their own turn', async ($, on) => {
+test('back-to-back prompts keep their own assessment on their own turn', { options: { mode: 'live' } }, async ($, on) => {
   const writes: Writes = []
   beneath(on, modelReplyFor, writes)
 
@@ -141,7 +141,7 @@ const turn = async ($: Parameters<Extract<Parameters<typeof test>[1], (...args: 
   return $.turn.complete({ turnId: `t${i}`, answer: 'ok', durationMs: 1, isAborted: false } as never)
 }
 
-test('a coaching note shows at most once every three turns', async ($, on) => {
+test('a coaching note shows at most once every three turns', { options: { mode: 'live' } }, async ($, on) => {
   beneath(on, modelReplyFor)
   const shown: number[] = []
   let text = ''
@@ -158,7 +158,7 @@ test('a coaching note shows at most once every three turns', async ($, on) => {
   expect(text).toBe(noteText(parseAssessment(qbr.judgeReply) as never))
 })
 
-test('quiet mutes notes and quiet off restores them', async ($, on) => {
+test('quiet mutes notes and quiet off restores them', { options: { mode: 'live' } }, async ($, on) => {
   beneath(on, modelReplyFor)
   const command = (args: string) =>
     $.command.run({ command: 'handhold', args, origin: { kind: 'composer' } } as never) as Promise<{ text: string }>
@@ -173,7 +173,7 @@ test('quiet mutes notes and quiet off restores them', async ($, on) => {
   expect(shown).toEqual([1, 5])
 })
 
-test('the post-answer assessment is written as a span on the turn', async ($, on) => {
+test('the post-answer assessment is written as a span on the turn', { options: { mode: 'live' } }, async ($, on) => {
   const writes: Writes = []
   beneath(on, modelReplyFor, writes)
 
@@ -188,7 +188,7 @@ test('the post-answer assessment is written as a span on the turn', async ($, on
   expect(assess.map(s => s.attributes['handhold.judge.phase'])).toEqual(['pre', 'post'])
 })
 
-test('a post-answer judge failure leaves the answer as it was', async ($, on) => {
+test('a post-answer judge failure leaves the answer as it was', { options: { mode: 'live' } }, async ($, on) => {
   beneath(on, () => new Error('timeout'))
 
   const r = await turn($, 1, qbr.prompt)
@@ -204,7 +204,7 @@ test('an unknown /handhold word shows the usage line', async ($, on) => {
   expect(r.text).toBe(USAGE)
 })
 
-test('a trivial turn makes no post-answer model call', async ($, on) => {
+test('a trivial turn makes no post-answer model call', { options: { mode: 'live' } }, async ($, on) => {
   let calls = 0
   beneath(on, () => {
     calls++
@@ -216,7 +216,7 @@ test('a trivial turn makes no post-answer model call', async ($, on) => {
   expect(calls).toBe(0)
 })
 
-test('the per-turn judge uses turnModel, not the pre-send model', { options: { fastModel: 'claude-haiku-5-5', turnModel: 'claude-sonnet-5-5' } }, async ($, on) => {
+test('the per-turn judge uses turnModel, not the pre-send model', { options: { mode: 'live', fastModel: 'claude-haiku-5-5', turnModel: 'claude-sonnet-5-5' } }, async ($, on) => {
   const models: string[] = []
   beneath(on, (_prompt, model) => {
     models.push(model)

@@ -40,19 +40,27 @@ For sessions that cannot take a flag (for example the desktop app), set `CLAUDE_
 
 | Command | What it does |
 |---|---|
-| `/handhold review [session\|week]` | Reflects on this session's turns (default), or the last 7 days across sessions: patterns, best moments, three before-and-after rewrites, and the trend. |
-| `/handhold pane` | Opens the progress pane: session and 7-day averages per dimension, and any techniques Handhold has stopped offering. |
+| `/handhold review [session\|week]` | Scores the turns in scope that haven't been scored yet (one Haiku call), then reflects on them (one Opus call): patterns, best moments, three before-and-after rewrites, and the trend. Defaults to this session; `week` covers the last 7 days across sessions. |
+| `/handhold history [session\|week\|all]` | Writes a local page of your past turns to `~/.handhold/history.html` and opens it in your browser: prompts, answers, tools used, tokens and any scores, with search and filters. Defaults to the last 30 days. Makes no model calls. |
+| `/handhold pane` | Opens the progress pane: session and 7-day averages per dimension, and any techniques Handhold has stopped offering. In review mode it fills in after each `/handhold review`. |
 | `/handhold export [--otlp] [--report [path]]` | Writes an OTLP JSON file of the last 7 days of traces, and a Markdown progress report (scores and short before-and-after pairs, no transcripts) you can share. With no flags it writes both. |
 | `/handhold quiet [off]` | Mutes coaching notes for this session, or turns them back on. |
 
 ## How it works
 
-### What happens in one turn
+### Two modes
+
+Handhold has a `mode` setting.
+
+- **`review` (the default)** makes no model calls while you work. Each turn is only recorded to disk. Scoring happens when you run `/handhold review`, which scores up to `reviewBatch` (15) unscored turns in **one** Haiku call and saves each score on its trace file so no turn is scored twice. It then makes one Opus call for the reflection. Apart from the standing brief below, a review is the only time Handhold uses your Claude usage.
+- **`live`** runs the judges on every warranted turn and shows coaching notes, as described next. It costs two Haiku calls per warranted prompt.
+
+### What happens in one turn (live mode)
 
 1. **You send a prompt.** Handhold skips commands and trivial requests (short lookups, greetings). Anything else goes to the **fast judge** (Haiku 5.5 by default), which scores it against the rubric below. The judge gets a 2-second budget, and if it's late or fails, your prompt goes through unchanged.
 2. **If a dimension scores 0 or 1,** Handhold adds a hidden note to that turn only. It asks Claude to offer the more ambitious version in a line or two before doing what you asked. Your words are never rewritten, and Claude still does the task.
 3. **Claude works.** Handhold records each model step, tool call and subagent run as it happens.
-4. **The turn ends.** The **full judge** (Opus 5.5 by default) scores the whole turn, using your prompt and a short summary of the turn (tools used, subagents, how it ended). The result is saved on the turn's trace.
+4. **The turn ends.** The **per-turn judge** (`turnModel`, Haiku 5.5 by default) scores the whole turn, using your prompt and a short summary of the turn (tools used, subagents, how it ended). The result is saved on the turn's trace.
 5. **A coaching note** appears under the answer if the score is low. Notes are at most one every three turns, and `/handhold quiet` mutes them.
 6. **Claude gets a standing brief** once per session, in its system prompt. It condenses the essay into working habits: look for the goal beyond the goal, use experts' real methods, start from raw data, challenge assumptions, and insist on outside checks. It tells Claude to skip all of this for trivial requests.
 
@@ -107,11 +115,11 @@ docs/superpowers/plans/  the implementation plan
 
 ## Settings
 
-Set these in the plugin's configuration: `fastModel` (Haiku 5.5), `turnModel` (Haiku 5.5, per-turn scoring), `reviewModel` (Opus 5.5, `/handhold review`), `preTimeoutMs` (2000), `postTimeoutMs` (20000), `redact` (`none`), `noteEvery` (3), and `traceRoot` (`~/.handhold/traces`).
+Set these in the plugin's configuration: `mode` (`review`), `reviewBatch` (15), `fastModel` (Haiku 5.5), `turnModel` (Haiku 5.5, per-turn scoring), `reviewModel` (Opus 5.5, `/handhold review`), `preTimeoutMs` (2000), `postTimeoutMs` (20000), `redact` (`none`), `noteEvery` (3), and `traceRoot` (`~/.handhold/traces`).
 
 ## Privacy
 
-Handhold has no server and no account. Traces stay on disk. The only network use is the judge calls and the reflection, which use your own Claude access. Traces contain your prompts and Claude's answers in full, so treat the trace folder and any export as sensitive. The exports are the only files built to be shared, and the progress report has no transcripts.
+Handhold has no server and no account. Traces stay on disk. The only network use is the judge calls and the reflection, which use your own Claude access. The history page is a local file with no network access; it shows tool names and timings but not tool arguments or results. Traces contain your prompts and Claude's answers in full, so treat the trace folder and any export as sensitive. The exports are the only files built to be shared, and the progress report has no transcripts.
 
 ## Limits
 

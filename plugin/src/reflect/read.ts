@@ -73,7 +73,9 @@ export function toTurnRecord(sessionId: string, fileName: string, spans: Span[])
     if (s.name !== 'handhold.assess') continue
     const a = assessFrom(s.attributes)
     if (!a) continue
-    if (s.attributes['handhold.judge.phase'] === 'post') assess.post = a
+    // A review-time score stands in for the post-answer one: both judge the finished turn.
+    const phase = s.attributes['handhold.judge.phase']
+    if (phase === 'post' || phase === 'review') assess.post = a
     else assess.pre = a
   }
   return { sessionId, turnId, startMs, prompt, assess }
@@ -84,9 +86,13 @@ export type TraceFile = { sessionId: string; fileName: string; spans: Span[] }
 export type Scope = { sessionId: string } | { sinceMs: number }
 
 // Reads every trace file in scope, line by line. A line that is not JSON is skipped; a missing folder is no files.
-export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Promise<TraceFile[]> {
+export async function traceRoot(io: Pick<ReadIo, 'home'>, cfg: Config): Promise<string> {
   const home = (await io.home()) ?? ''
-  const root = cfg.traceRoot.replace(/^~(?=\/|$)/, home)
+  return cfg.traceRoot.replace(/^~(?=\/|$)/, home)
+}
+
+export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Promise<TraceFile[]> {
+  const root = await traceRoot(io, cfg)
 
   let sessions: string[] = []
   if ('sessionId' in scope) {
@@ -133,14 +139,19 @@ export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Pro
   return files
 }
 
-// Every turn in scope, oldest first.
-export async function readTurns(io: ReadIo, cfg: Config, scope: Scope): Promise<TurnRecord[]> {
+// The turns of files already read, oldest first.
+export function turnsOf(files: TraceFile[]): TurnRecord[] {
   const records: TurnRecord[] = []
-  for (const f of await readTraceFiles(io, cfg, scope)) {
+  for (const f of files) {
     const record = toTurnRecord(f.sessionId, f.fileName, f.spans)
     if (record) records.push(record)
   }
   return records.sort((a, b) => a.startMs - b.startMs)
+}
+
+// Every turn in scope, oldest first.
+export async function readTurns(io: ReadIo, cfg: Config, scope: Scope): Promise<TurnRecord[]> {
+  return turnsOf(await readTraceFiles(io, cfg, scope))
 }
 
 export function aggregate(turns: TurnRecord[]): Aggregate {

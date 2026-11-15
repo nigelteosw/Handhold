@@ -242,7 +242,7 @@ test('the pane says so when no turn has been assessed', async ($, on) => {
   }
 })
 
-test('the pane averages the session post-answer scores', async ($, on) => {
+test('the pane averages the session post-answer scores', { options: { mode: 'live' } }, async ($, on) => {
   paneBottom(on, prompt => (prompt.includes('Request:\nAlpha') ? judgeJson(1) : judgeJson(3)))
 
   await $.prompt.submit({ text: 'Alpha: plan the whole quarterly review for the board' } as never)
@@ -260,7 +260,7 @@ test('the pane averages the session post-answer scores', async ($, on) => {
   }
 })
 
-test('the pane shows the techniques being backed off', async ($, on) => {
+test('the pane shows the techniques being backed off', { options: { mode: 'live' } }, async ($, on) => {
   paneBottom(on, () => judgeJson(1))
 
   await $.prompt.submit({ text: 'Plan the whole quarterly review for the board' } as never)

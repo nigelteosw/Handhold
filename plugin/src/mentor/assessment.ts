@@ -60,7 +60,7 @@ export function needsNudge(a: Assessment): boolean {
 }
 
 // Attributes for the handhold.assess span, keyed as spec section 4.
-export function assessAttrs(a: Assessment, phase: 'pre' | 'post'): Record<string, unknown> {
+export function assessAttrs(a: Assessment, phase: 'pre' | 'post' | 'review'): Record<string, unknown> {
   return {
     'handhold.rubric.version': RUBRIC_VERSION,
     'handhold.judge.phase': phase,
