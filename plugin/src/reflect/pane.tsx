@@ -17,16 +17,16 @@ const sessionStats = atom(
 
 const today = (): string => new Date().toISOString().slice(0, 10)
 
-// Records a post-answer assessment into this session's averages and the day's totals.
-export async function recordSessionStat($: Engine, a: Assessment): Promise<void> {
+// Records an assessment into the day's totals and, when it belongs to this session, the session's averages.
+export async function recordSessionStat($: Engine, a: Assessment, day = today(), isThisSession = true): Promise<void> {
   if (!a.warranted) return
-  await update($, sessionStats, s => ({
+  if (isThisSession) await update($, sessionStats, s => ({
     altitude: { n: s.altitude.n + 1, sum: s.altitude.sum + a.scores.altitude },
     depth: { n: s.depth.n + 1, sum: s.depth.sum + a.scores.depth },
     range: { n: s.range.n + 1, sum: s.range.sum + a.scores.range },
   }))
   const days = ((await $.store.get('days')) ?? []) as DayStats[]
-  await $.store.set('days', recordDay(days, today(), a))
+  await $.store.set('days', recordDay(days, day, a))
 }
 
 const fmt = (n: number): string => n.toFixed(1)

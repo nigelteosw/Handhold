@@ -22,20 +22,22 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', async ($, e, next) => {
     await recordPrompt($, e)
+    // Review mode makes no model call here: the prompt is only recorded.
+    if (cfg.mode !== 'live') return next(e)
     return nudgePrompt($, cfg, e, next)
   }).catch(fallThrough)
 
   on('turn.start', async ($, e, next) => {
     await openTurn($, cfg, e)
     const result = await next(e)
-    await attachAssess($, cfg, e)
+    if (cfg.mode === 'live') await attachAssess($, cfg, e)
     return result
   }).catch(fallThrough)
 
   on('turn.complete', async ($, e, next) => {
     const closed = await closeTurn($, cfg, e)
     const result = await next(e)
-    if (!closed) return result
+    if (!closed || cfg.mode !== 'live') return result
 
     const a = await postAssess($, cfg, closed)
     const show = a !== null && (await throttle($, a, cfg.noteEvery))
