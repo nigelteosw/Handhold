@@ -1,0 +1,12 @@
+{
+  "name": "handhold",
+  "owner": { "name": "Nigel Teo" },
+  "metadata": { "description": "Handhold: a mentor that nudges you and Claude toward more ambitious work." },
+  "plugins": [
+    {
+      "name": "handhold",
+      "source": "./plugin",
+      "description": "A mentor that nudges you and Claude toward more ambitious work: altitude, depth, range."
+    }
+  ]
+}
