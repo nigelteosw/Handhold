@@ -17,7 +17,7 @@ const composeInput = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5',
 // The engine's bottom for the events these tests raise. The model answers from `reply`, keyed by the judge's prompt.
 const beneath = (
   on: KitOn,
-  reply: (prompt: string) => string | Error,
+  reply: (prompt: string, model: string) => string | Error,
   writes: Writes = [],
   sections: unknown[] = [],
 ) => {
@@ -36,7 +36,7 @@ const beneath = (
     return { value: undefined }
   })
   on('model.complete', (_, e) => {
-    const out = reply(e.prompt)
+    const out = reply(e.prompt, e.model)
     if (out instanceof Error) throw out
     return { value: { isAnswered: true, text: out, usage: { input_tokens: 1, output_tokens: 1 } } as never }
   })
@@ -214,4 +214,18 @@ test('a trivial turn makes no post-answer model call', async ($, on) => {
   await turn($, 1, trivial.prompt)
 
   expect(calls).toBe(0)
+})
+
+test('the per-turn judge uses turnModel, not the pre-send model', { options: { fastModel: 'claude-haiku-5-5', turnModel: 'claude-sonnet-5-5' } }, async ($, on) => {
+  const models: string[] = []
+  beneath(on, (_prompt, model) => {
+    models.push(model)
+    return qbr.judgeReply
+  })
+
+  await $.prompt.submit({ text: qbr.prompt } as never)
+  await turn($, 1, qbr.prompt)
+
+  expect(models[0]).toBe('claude-haiku-5-5')
+  expect(models[models.length - 1]).toBe('claude-sonnet-5-5')
 })

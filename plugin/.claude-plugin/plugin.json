@@ -10,11 +10,17 @@
       "description": "Model for the pre-send judge",
       "title": "Pre-send judge model"
     },
-    "fullModel": {
+    "turnModel": {
+      "type": "string",
+      "default": "claude-haiku-5-5",
+      "title": "Per-turn judge model",
+      "description": "Model that scores each turn after the answer"
+    },
+    "reviewModel": {
       "type": "string",
       "default": "claude-opus-5-5",
-      "description": "Model for the post-answer judge and reviews",
-      "title": "Post-answer judge model"
+      "title": "Review model",
+      "description": "Model that writes /handhold review"
     },
     "preTimeoutMs": {
       "type": "number",
