@@ -12,6 +12,7 @@ Handhold scores each request on these three, nudges Claude to offer the more amb
 
 - **Claude Code** in the terminal and IDE extensions: supported.
 - **Claude desktop app, Claude Code session**: loads through `CLAUDE_CODE_PLUGIN_DIRS`. Checked in headless runs only; the interactive desktop check is still open.
+- **Claude desktop app, chat with plugins**: the `/` menu there lists only skills, never a command a plugin registers while it runs, so `/handhold` doesn't appear. Use `/review`, `/history` and `/forget` there instead. These skills call Handhold through its `mcp__handhold__handhold` tool. If Handhold's code isn't running in that app, they say so instead of guessing.
 - **Cowork mode**: not yet verified.
 - **The claude.ai chat tab** (web or desktop): not supported. Local plugins cannot reach it.
 
@@ -37,6 +38,8 @@ claude --plugin-dir /path/to/Handhold/plugin
 For sessions that cannot take a flag (for example the desktop app), set `CLAUDE_CODE_PLUGIN_DIRS` to the absolute path of `plugin/` in the `env` block of `~/.claude/settings.json`.
 
 ## Commands
+
+`/handhold <subcommand>` works wherever Claude Code runs plugin code. Where the `/` menu lists only skills (the desktop app's chat), the same subcommands are the skills `/review`, `/history` and `/forget`. In the terminal they appear as `/handhold:review` and so on. Each one costs a short model turn to call the tool, which `/handhold` doesn't.
 
 | Command | What it does |
 |---|---|

@@ -40,11 +40,33 @@ export async function route($: Engine, cfg: Config, args: string): Promise<{ tex
   return { text: USAGE }
 }
 
+// The tool the plugin's skills call. Surfaces whose slash menu lists only skills (the desktop app's chat)
+// never show a command registered at runtime, so /review, /history and /forget reach the router through it.
+export const TOOL_NAME = 'handhold'
+export const TOOL_ID = `mcp__handhold__${TOOL_NAME}`
+
 export function registerCommands(on: On, cfg: Config): void {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'handhold', description: 'Handhold: nudges, reviews and the progress pane' })
+    await $.tool.register({
+      name: TOOL_NAME,
+      description: 'Runs a Handhold command and returns its output. Only call it when a Handhold skill says to.',
+      inputSchema: {
+        type: 'object',
+        properties: { command: { type: 'string', description: 'The /handhold arguments, e.g. "review week"' } },
+        required: ['command'],
+      },
+      // In the prompt's tool list, so a skill's call needs no ToolSearch: one short line of context.
+      isDeferred: false,
+    })
     return next(e)
   }).catch(fallThrough)
 
   on('command.run', { command: 'handhold' }, async ($, e) => route($, cfg, e.args))
+
+  on('tool.call', { tool: TOOL_ID }, async ($, e) => {
+    const command = typeof e['command'] === 'string' ? e['command'] : ''
+    const { text } = await route($, cfg, command)
+    return { result: text }
+  }).catch(() => ({ result: 'Handhold could not run that command. Try it again from Claude Code in the terminal.' }))
 }
