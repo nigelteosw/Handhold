@@ -5,6 +5,7 @@ import { attachAssess, nudgePrompt, registerNudge } from '../src/nudge/hooks'
 import { noteText } from '../src/nudge/note'
 import { postAssess, throttle } from '../src/nudge/note'
 import { readConfig } from '../src/shared/config'
+import { refreshHistory } from '../src/reflect/history'
 import { drawPane, PANE_ID } from '../src/reflect/pane'
 import { registerCommands } from '../src/shared/commands'
 import { fallThrough } from '../src/shared/safe'
@@ -37,9 +38,15 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const closed = await closeTurn($, cfg, e)
     const result = await next(e)
-    if (!closed || cfg.mode !== 'live') return result
+    if (!closed) return result
+    if (cfg.mode !== 'live') {
+      await refreshHistory($, cfg)
+      return result
+    }
 
     const a = await postAssess($, cfg, closed)
+    // After the judge, so an open history page gets the turn with its scores.
+    await refreshHistory($, cfg)
     const show = a !== null && (await throttle($, a, cfg.noteEvery))
     return show && a ? { ...result, text: noteText(a) } : result
   }).catch(fallThrough)
