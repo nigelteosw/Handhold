@@ -15,6 +15,17 @@ Handhold scores each request on these three, nudges Claude to offer the more amb
 - **Cowork mode**: not yet verified.
 - **The claude.ai chat tab** (web or desktop): not supported. Local plugins cannot reach it.
 
+## Install from GitHub
+
+In Claude Code, add this repository as a marketplace and install the plugin:
+
+```sh
+claude plugin marketplace add nigelteosw/Handhold
+claude plugin install handhold@handhold
+```
+
+The plugin is copied at install time. To pick up a newer version, run `claude plugin update handhold@handhold`.
+
 ## Install (while developing)
 
 Run Claude Code with the plugin folder:
