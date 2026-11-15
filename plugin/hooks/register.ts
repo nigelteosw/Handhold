@@ -15,11 +15,7 @@ export const register: Register = (on, options) => {
   registerCapture(on, cfg)
   registerNudge(on)
 
-  registerCommands(on, {
-    review: async () => ({ text: 'Not available yet.' }),
-    export: async () => ({ text: 'Not available yet.' }),
-    pane: async () => ({ text: 'Not available yet.' }),
-  })
+  registerCommands(on, cfg)
 
   on('prompt.submit', async ($, e, next) => {
     await recordPrompt($, e)
