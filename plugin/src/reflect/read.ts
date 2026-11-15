@@ -79,12 +79,12 @@ export function toTurnRecord(sessionId: string, fileName: string, spans: Span[])
   return { sessionId, turnId, startMs, prompt, assess }
 }
 
-// Reads every turn in scope, line by line. A line that is not JSON is skipped; a missing folder is no turns.
-export async function readTurns(
-  io: ReadIo,
-  cfg: Config,
-  scope: { sessionId: string } | { sinceMs: number },
-): Promise<TurnRecord[]> {
+export type TraceFile = { sessionId: string; fileName: string; spans: Span[] }
+
+export type Scope = { sessionId: string } | { sinceMs: number }
+
+// Reads every trace file in scope, line by line. A line that is not JSON is skipped; a missing folder is no files.
+export async function readTraceFiles(io: ReadIo, cfg: Config, scope: Scope): Promise<TraceFile[]> {
   const home = (await io.home()) ?? ''
   const root = cfg.traceRoot.replace(/^~(?=\/|$)/, home)
 
@@ -99,19 +99,19 @@ export async function readTurns(
     }
   }
 
-  const records: TurnRecord[] = []
+  const files: TraceFile[] = []
   for (const sessionId of sessions) {
-    let files: { name: string; mtimeMs: number }[] = []
+    let entries: { name: string; mtimeMs: number }[] = []
     try {
-      files = (await io.list(`${root}/${sessionId}`)).filter(e => e.kind === 'file' && e.name.endsWith('.jsonl'))
+      entries = (await io.list(`${root}/${sessionId}`)).filter(e => e.kind === 'file' && e.name.endsWith('.jsonl'))
     } catch {
       continue
     }
-    for (const file of files) {
-      if ('sinceMs' in scope && file.mtimeMs < scope.sinceMs) continue
+    for (const entry of entries) {
+      if ('sinceMs' in scope && entry.mtimeMs < scope.sinceMs) continue
       let text: string
       try {
-        text = await io.read(`${root}/${sessionId}/${file.name}`)
+        text = await io.read(`${root}/${sessionId}/${entry.name}`)
       } catch {
         continue
       }
@@ -119,14 +119,26 @@ export async function readTurns(
       for (const line of text.split('\n')) {
         if (line.trim() === '') continue
         try {
-          spans.push(JSON.parse(line) as Span)
+          const parsed = JSON.parse(line) as Partial<Span> | null
+          if (parsed && typeof parsed === 'object' && typeof parsed.spanId === 'string' && typeof parsed.name === 'string') {
+            spans.push(parsed as Span)
+          }
         } catch {
           // A damaged line costs that line only.
         }
       }
-      const record = toTurnRecord(sessionId, file.name, spans)
-      if (record) records.push(record)
+      files.push({ sessionId, fileName: entry.name, spans })
     }
+  }
+  return files
+}
+
+// Every turn in scope, oldest first.
+export async function readTurns(io: ReadIo, cfg: Config, scope: Scope): Promise<TurnRecord[]> {
+  const records: TurnRecord[] = []
+  for (const f of await readTraceFiles(io, cfg, scope)) {
+    const record = toTurnRecord(f.sessionId, f.fileName, f.spans)
+    if (record) records.push(record)
   }
   return records.sort((a, b) => a.startMs - b.startMs)
 }
