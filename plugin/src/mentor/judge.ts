@@ -12,11 +12,11 @@ export type JudgeInput = {
   recent: Assessment[]
 }
 
-// Scores one request. The pre phase uses the fast model and short budget; the post phase the full model.
+// Scores one request. The pre phase uses the fast model and short budget; the post phase the per-turn model.
 // Returns null on any failure, so a judge problem never changes the turn.
 export async function judge($: Engine, input: JudgeInput, cfg: Config): Promise<Assessment | null> {
   const isPre = input.phase === 'pre'
-  const model = isPre ? cfg.fastModel : cfg.fullModel
+  const model = isPre ? cfg.fastModel : cfg.turnModel
   const timeoutMs = isPre ? cfg.preTimeoutMs : cfg.postTimeoutMs
 
   const parts = [`Request:\n${input.prompt}`]

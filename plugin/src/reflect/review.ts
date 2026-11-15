@@ -1,6 +1,7 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Config } from '../shared/config'
+import { techniqueLabel } from '../mentor/rubric'
 import { aggregate, readIo, readTurns } from './read'
 import type { Aggregate, TurnRecord } from './read'
 
@@ -17,7 +18,7 @@ const reviewPrompt = (agg: Aggregate): string =>
   [
     `Turns: ${agg.turns}; warranted: ${agg.warranted}`,
     `Average scores: altitude ${agg.avg.altitude.toFixed(2)}, depth ${agg.avg.depth.toFixed(2)}, range ${agg.avg.range.toFixed(2)}`,
-    `Most missed techniques: ${agg.missed.map(m => `${m.technique} (${m.count})`).join(', ') || 'none'}`,
+    `Most missed techniques: ${agg.missed.map(m => `${techniqueLabel(m.technique)} (${m.count})`).join(', ') || 'none'}`,
     `Weakest turns, with rewrites:\n${agg.worst.map(pair).join('\n\n') || 'none'}`,
     `Strongest turns:\n${agg.best.map(t => t.prompt).join('\n') || 'none'}`,
   ].join('\n\n')
@@ -29,7 +30,7 @@ export function renderAggregate(agg: Aggregate): string {
     `Altitude ${agg.avg.altitude.toFixed(1)} · Depth ${agg.avg.depth.toFixed(1)} · Range ${agg.avg.range.toFixed(1)}`,
   ]
   if (agg.missed.length > 0) {
-    lines.push(`Most missed: ${agg.missed.map(m => `${m.technique} (${m.count})`).join(', ')}`)
+    lines.push(`Most missed: ${agg.missed.map(m => `${techniqueLabel(m.technique)} (${m.count})`).join(', ')}`)
   }
   for (const t of agg.worst) lines.push(`Try: "${t.prompt}" → "${(t.assess.post ?? t.assess.pre)?.rewrite ?? ''}"`)
   return lines.join('\n')
@@ -45,7 +46,7 @@ export async function review($: Engine, cfg: Config, args: string): Promise<{ te
   const agg = aggregate(turns)
   try {
     const reply = await $.model.complete({
-      model: cfg.fullModel,
+      model: cfg.reviewModel,
       system: REFLECT_SYSTEM,
       prompt: reviewPrompt(agg),
       maxTokens: 1200,

@@ -2,7 +2,8 @@ export type Redact = 'none' | 'tool-results' | 'all-tool-io'
 
 export type Config = {
   fastModel: string
-  fullModel: string
+  turnModel: string
+  reviewModel: string
   preTimeoutMs: number
   postTimeoutMs: number
   redact: Redact
@@ -24,7 +25,8 @@ const redactMode = (value: unknown): Redact =>
 export function readConfig(options: Record<string, unknown>): Config {
   return {
     fastModel: text(options.fastModel, 'claude-haiku-5-5'),
-    fullModel: text(options.fullModel, 'claude-opus-5-5'),
+    turnModel: text(options.turnModel, 'claude-haiku-5-5'),
+    reviewModel: text(options.reviewModel, 'claude-opus-5-5'),
     preTimeoutMs: positive(options.preTimeoutMs, 2000),
     postTimeoutMs: positive(options.postTimeoutMs, 20000),
     redact: redactMode(options.redact),

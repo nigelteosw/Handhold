@@ -3,7 +3,7 @@
 A local Claude plugin that mentors you to be more ambitious when you work with Claude. It follows Felix Rieseberg's essay [*How to be more ambitious: a tutorial for humans with models*](https://felixrieseberg.com/how-to-be-more-ambitious-a-tutorial-for-humans-with-models/), which describes three kinds of ambition:
 
 - **Altitude**: aim at the outcome, not just the task. "What is the goal beyond the goal?"
-- **Depth**: work the way a field-leading expert would, with their raw material, methods and an outside judge.
+- **Depth**: work the way a field-leading expert would, with their raw material, methods and an outside check.
 - **Range**: draw on other fields through their real methods, not role-play.
 
 Handhold scores each request on these three, nudges Claude to offer the more ambitious version, gives you a short coaching note, and reflects on your progress over time. Everything runs on your machine, and it works in any field, not only programming.
@@ -56,8 +56,8 @@ Each warranted request gets a 0–3 score on each dimension, based on what **you
 | | 0 | 1 | 2 | 3 |
 |---|---|---|---|---|
 | **Altitude** | One micro-task, no purpose | Task plus context | States the goal and lets Claude choose the approach | Delegates an ongoing outcome, with access and checks so you can step out of the loop |
-| **Depth** | Digested input, accepts a surface answer | Expert quality asked for, in vocabulary only | Gives raw material, insists on real methods, challenges an assumption | Sets an unreasonable goal, asks for an outside judge, asks for new knowledge |
-| **Range** | One field | Mentions another perspective | Turns nouns into verbs and assembles a crew of fields | Uses those fields' real methods, including a red team |
+| **Depth** | Digested input, accepts a surface answer | Expert quality asked for, in vocabulary only | Gives raw material, insists on real methods, challenges an assumption | Sets an unreasonable goal, asks for an outside check, asks for new knowledge |
+| **Range** | One field | Mentions another perspective | Describes the job as an action and brings in people from other fields | Uses those fields' working methods, including someone whose job is to find the plan's weak points |
 
 The judge also names the weakest dimension (the **opportunity**), one technique from the essay's list, a one-sentence nudge, and a rewritten prompt in your own voice. For creative work, Altitude isn't pushed, since the essay notes it fits less well there. The rubric wording lives in one file, `plugin/src/mentor/rubric.ts`.
 
@@ -96,7 +96,7 @@ docs/superpowers/plans/  the implementation plan
 
 ## Settings
 
-Set these in the plugin's configuration: `fastModel` (Haiku 5.5), `fullModel` (Opus 5.5), `preTimeoutMs` (2000), `postTimeoutMs` (20000), `redact` (`none`), `noteEvery` (3), and `traceRoot` (`~/.handhold/traces`).
+Set these in the plugin's configuration: `fastModel` (Haiku 5.5), `turnModel` (Haiku 5.5, per-turn scoring), `reviewModel` (Opus 5.5, `/handhold review`), `preTimeoutMs` (2000), `postTimeoutMs` (20000), `redact` (`none`), `noteEvery` (3), and `traceRoot` (`~/.handhold/traces`).
 
 ## Privacy
 

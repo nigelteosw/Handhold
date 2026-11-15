@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { isTrivial } from '../src/mentor/gate'
 import { assessAttrs, needsNudge, parseAssessment } from '../src/mentor/assessment'
-import { RUBRIC_TEXT, TECHNIQUES } from '../src/mentor/rubric'
+import { RUBRIC_TEXT, TECHNIQUES, techniqueLabel } from '../src/mentor/rubric'
 import * as churn from './fixtures/churn'
 import * as crash from './fixtures/crash'
 import * as qbr from './fixtures/qbr'
@@ -44,4 +44,13 @@ test('the rubric names every technique', () => {
 test('assessAttrs keys the altitude score as spec section 4', () => {
   const a = parseAssessment(qbr.judgeReply)
   expect(a && assessAttrs(a, 'pre')['handhold.score.altitude']).toBe(1)
+})
+
+test('every technique has a plain-language label for the person', () => {
+  for (const t of TECHNIQUES) {
+    const label = techniqueLabel(t)
+    expect(label.length > 0).toBe(true)
+    expect(label.includes('-')).toBe(false)
+  }
+  expect(techniqueLabel('goal-beyond-the-goal')).toBe('Aim at the goal behind the request')
 })
