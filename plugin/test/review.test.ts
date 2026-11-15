@@ -217,7 +217,7 @@ test('a live history view keeps its scope and rolls its window forward', () => {
   expect(parseLive('not json')).toBeNull()
 })
 
-const liveTurn = async ($: Parameters<Parameters<typeof test>[1]>[0], on: KitOn, openedMs: number): Promise<Writes> => {
+const liveTurn = async ($: Parameters<Extract<Parameters<typeof test>[1], (...a: never[]) => unknown>>[0], on: KitOn, openedMs: number): Promise<Writes> => {
   const writes: Writes = []
   beneath(on, () => {}, writes)
   on('fs.read', (_, e) => {
