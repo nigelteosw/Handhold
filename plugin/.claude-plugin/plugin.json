@@ -51,5 +51,6 @@
       "description": "Where trace files are written",
       "title": "Trace folder"
     }
-  }
+  },
+  "license": "MIT"
 }
