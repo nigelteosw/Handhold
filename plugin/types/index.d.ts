@@ -1,5 +1,7 @@
 declare module 'claude-code' {
   interface PluginState {
-    handhold: {}
+    handhold: {
+      sinkWarned: Shaped<boolean>
+    }
   }
 }

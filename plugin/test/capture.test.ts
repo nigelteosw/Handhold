@@ -11,6 +11,10 @@ import {
   usageAttrs,
 } from '../src/capture/otel'
 import { TurnSpans } from '../src/capture/spans'
+import { capValues, redact, toJsonl, turnPath, writeTurn } from '../src/capture/sink'
+import type { SinkIo } from '../src/capture/sink'
+import type { Span } from '../src/capture/otel'
+import { readConfig } from '../src/shared/config'
 
 test('ids have the OTel widths', () => {
   expect(newTraceId()).toMatch(/^[0-9a-f]{32}$/)
@@ -64,4 +68,101 @@ test('a tool span carries its operation name and call id', () => {
   const attrs = toolAttrs('Bash', 'tu1', { command: 'ls' })
   expect(attrs['gen_ai.operation.name']).toBe('execute_tool')
   expect(attrs['gen_ai.tool.call.id']).toBe('tu1')
+})
+
+const toolSpan = (): Span => ({
+  traceId: 't',
+  spanId: 's',
+  parentSpanId: null,
+  name: 'execute_tool Bash',
+  kind: 'INTERNAL',
+  startTimeUnixNano: '0',
+  endTimeUnixNano: '0',
+  status: { code: 'OK' },
+  schemaUrl: SCHEMA_URL,
+  attributes: {
+    'gen_ai.operation.name': 'execute_tool',
+    'gen_ai.tool.call.arguments': { command: 'cat .env' },
+    'gen_ai.tool.call.result': 'SECRET=1',
+  },
+})
+
+test('redact tool-results replaces the result and keeps the arguments', () => {
+  const [s] = redact([toolSpan()], 'tool-results')
+  expect(s.attributes['gen_ai.tool.call.result']).toBe('[redacted]')
+  expect(s.attributes['gen_ai.tool.call.arguments']).toEqual({ command: 'cat .env' })
+})
+
+test('redact all-tool-io replaces the arguments too', () => {
+  const [s] = redact([toolSpan()], 'all-tool-io')
+  expect(s.attributes['gen_ai.tool.call.result']).toBe('[redacted]')
+  expect(s.attributes['gen_ai.tool.call.arguments']).toBe('[redacted]')
+})
+
+test('redact none leaves the tool io as it was', () => {
+  const [s] = redact([toolSpan()], 'none')
+  expect(s.attributes['gen_ai.tool.call.result']).toBe('SECRET=1')
+})
+
+test('capValues cuts a long value and marks it', () => {
+  const [s] = capValues(
+    [{ ...toolSpan(), attributes: { 'gen_ai.tool.call.result': 'x'.repeat(200000) } }],
+    65536,
+  )
+  expect(String(s.attributes['gen_ai.tool.call.result']).length).toBe(65536 + '…[truncated]'.length)
+})
+
+test('toJsonl writes one parsable line per span', () => {
+  const lines = toJsonl([toolSpan(), toolSpan()]).trimEnd().split('\n')
+  expect(lines.length).toBe(2)
+  expect(JSON.parse(lines[0]).name).toBe('execute_tool Bash')
+})
+
+test('turnPath zero-pads the sequence number', () => {
+  expect(turnPath('/r', 's', 7, 't')).toBe('/r/s/00007-t.jsonl')
+})
+
+const fakeIo = (overrides: Partial<SinkIo> = {}): SinkIo & { writes: string[]; statuses: string[] } => {
+  let warned = false
+  const io = {
+    writes: [] as string[],
+    statuses: [] as string[],
+    home: async () => '/home/t',
+    write: async (path: string) => {
+      io.writes.push(path)
+    },
+    isWarned: async () => warned,
+    markWarned: async () => {
+      warned = true
+    },
+    status: (text: string) => {
+      io.statuses.push(text)
+    },
+    ...overrides,
+  }
+  return io
+}
+
+test('writeTurn writes under the expanded trace root', async () => {
+  const io = fakeIo()
+
+  const ok = await writeTurn(io, readConfig({}), 's1', 1, 't1', [toolSpan()])
+
+  expect(ok).toBe(true)
+  expect(io.writes).toEqual(['/home/t/.handhold/traces/s1/00001-t1.jsonl'])
+})
+
+test('a failed trace write warns once per session and returns false', async () => {
+  const io = fakeIo({
+    write: async () => {
+      throw new Error('EACCES')
+    },
+  })
+
+  const first = await writeTurn(io, readConfig({}), 's1', 1, 't1', [toolSpan()])
+  const second = await writeTurn(io, readConfig({}), 's1', 2, 't2', [toolSpan()])
+
+  expect(first).toBe(false)
+  expect(second).toBe(false)
+  expect(io.statuses).toEqual(['Handhold: trace write failed'])
 })
