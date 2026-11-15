@@ -2,26 +2,11 @@
 
 export const SCHEMA_URL = 'https://opentelemetry.io/schemas/1.37.0'
 
-export type SpanKind = 'INTERNAL' | 'CLIENT'
-
-export type SpanStatus = { code: 'UNSET' | 'OK' | 'ERROR'; message?: string }
-
-export type Span = {
-  traceId: string
-  spanId: string
-  parentSpanId: string | null
-  name: string
-  kind: SpanKind
-  startTimeUnixNano: string
-  endTimeUnixNano: string | null
-  status: SpanStatus
-  schemaUrl: string
-  attributes: Record<string, unknown>
-}
+export type { Span, SpanKind, SpanStatus } from '../../types'
 
 export type MessagePart =
   | { type: 'text'; content: string }
-  | { type: 'tool_call'; id: string; name: string; arguments: unknown }
+  | { type: 'tool_call'; id?: string; name: string; arguments: unknown }
   | { type: 'tool_call_response'; id: string; response: unknown }
 
 export type Message = { role: 'user' | 'assistant' | 'tool'; parts: MessagePart[] }

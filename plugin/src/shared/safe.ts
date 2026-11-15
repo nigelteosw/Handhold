@@ -1,26 +1,4 @@
-// Wraps a hook so that a throw never breaks the chain. If the hook had already
-// called next, its result is replayed (next must not run twice). Otherwise the
-// event passes straight on to next(e), as if this plugin had not hooked it.
-export function safe<H extends (...args: any[]) => any>(hook: H): H {
-  return (async (...args: any[]) => {
-    const [$, e, next] = args
-    let isCalled = false
-    let lastResult: unknown
-    const tracked = Object.assign(
-      (x: unknown) => {
-        isCalled = true
-        lastResult = next(x)
-        return lastResult
-      },
-      next,
-    )
-
-    try {
-      return await hook($, e, tracked, ...args.slice(3))
-    } catch (err) {
-      const name = err instanceof Error ? err.name : 'Error'
-      $?.ui?.log?.(`handhold: hook failed (${name})`, { to: 'debug' })
-      return isCalled ? lastResult : next(e)
-    }
-  }) as H
-}
+// The catch handler for a registration: when the hook throws, the event passes on to next(e).
+// The engine's replay rule applies: if the hook had already called next, the call is replayed,
+// so nothing runs twice. Use as: on('event', hook).catch(fallThrough).
+export const fallThrough = (_$: unknown, e: unknown, next: (e: unknown) => unknown): unknown => next(e)

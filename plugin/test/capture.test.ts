@@ -166,3 +166,141 @@ test('a failed trace write warns once per session and returns false', async () =
   expect(second).toBe(false)
   expect(io.statuses).toEqual(['Handhold: trace write failed'])
 })
+
+const lines = (text: string): Span[] =>
+  text.trim().split('\n').map(line => JSON.parse(line) as Span)
+
+// The engine's bottom: what runs beneath the plugin for each event the tests raise.
+const bottom = (
+  on: Parameters<Parameters<typeof test>[1]>[1],
+  answer: string,
+  tool: (e: { tool: string }) => unknown = () => ({ result: { text: 'ok' } }),
+) => {
+  on('env.get', () => ({ value: '/home/t' }))
+  on('session.id', () => ({ value: 's1' }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('tool.call', (_, e) => tool(e) as never)
+  on('turn.complete', () => ({ text: answer }))
+  on('session.end', () => ({ sessionId: 's1' }))
+}
+
+test('capture writes one OTel tree per turn', async ($, on) => {
+  const writes: { path: string; text: string }[] = []
+  bottom(on, 'hello')
+  on('fs.write', (_, e) => {
+    writes.push(e)
+    return { value: undefined }
+  })
+  on('turn.step', async function* () {
+    yield { kind: 'text', index: 0, text: 'hello', ref: 1 } as never
+    return {
+      turnId: 't1',
+      index: 0,
+      answer: 'hello',
+      toolUses: [],
+      stopReason: 'end_turn',
+      usage: { input_tokens: 5, output_tokens: 1, model: 'claude-opus-5-5' },
+    } as never
+  })
+
+  await $.prompt.submit({ text: 'hi' } as never)
+  await $.turn.start({ text: 'hi', turnId: 't1' } as never)
+  const stream = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 } as never)
+  for await (const _chunk of stream) void _chunk
+  await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
+  await $.turn.complete({ turnId: 't1', answer: 'hello', durationMs: 10, isAborted: false } as never)
+
+  expect(writes.length).toBe(1)
+  expect(writes[0].path).toBe('/home/t/.handhold/traces/s1/00001-t1.jsonl')
+  const spans = lines(writes[0].text)
+  const root = spans.find(s => s.name === 'invoke_agent claude')
+  expect(JSON.stringify(root?.attributes['gen_ai.input.messages'])).toContain('"hi"')
+  expect(JSON.stringify(root?.attributes['gen_ai.output.messages'])).toContain('"hello"')
+  expect(spans.find(s => s.name === 'chat claude-opus-5-5')?.attributes['gen_ai.usage.input_tokens']).toBe(5)
+  expect(spans.find(s => s.name === 'execute_tool Bash')?.parentSpanId).toBe(root?.spanId ?? null)
+})
+
+test('a slash command is not captured as the prompt', async ($, on) => {
+  const writes: { path: string; text: string }[] = []
+  bottom(on, '')
+  on('fs.write', (_, e) => {
+    writes.push(e)
+    return { value: undefined }
+  })
+
+  await $.prompt.submit({ text: '/handhold review', command: { name: 'handhold' } } as never)
+  await $.turn.start({ text: '/handhold review', turnId: 't1' } as never)
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false } as never)
+
+  const root = lines(writes[0].text).find(s => s.name === 'invoke_agent claude')
+  expect(root?.attributes['gen_ai.input.messages']).toEqual([{ role: 'user', parts: [{ type: 'text', content: '' }] }] as never)
+})
+
+test('an aborted turn closes its open tool span with ERROR and the next turn starts clean', async ($, on) => {
+  const writes: { path: string; text: string }[] = []
+  bottom(on, '', () => new Promise(() => {}))
+  on('fs.write', (_, e) => {
+    writes.push(e)
+    return { value: undefined }
+  })
+
+  await $.prompt.submit({ text: 'run it' } as never)
+  await $.turn.start({ text: 'run it', turnId: 't1' } as never)
+  void $.tool.call({ tool: 'Bash', command: 'sleep 9' } as never)
+  await new Promise(r => setTimeout(r, 10))
+  await $.turn.complete({ turnId: 't1', answer: '', durationMs: 5, isAborted: true } as never)
+
+  const spans = lines(writes[0].text)
+  expect(spans.find(s => s.name === 'execute_tool Bash')?.status.code).toBe('ERROR')
+  expect(writes[0].path.endsWith('00001-t1.jsonl')).toBe(true)
+
+  await $.turn.start({ text: 'next', turnId: 't2' } as never)
+  await $.turn.complete({ turnId: 't2', answer: 'ok', durationMs: 1, isAborted: false } as never)
+  expect(writes.length).toBe(2)
+  expect(writes[1].path.endsWith('00002-t2.jsonl')).toBe(true)
+  const next = lines(writes[1].text)
+  expect(next.map(s => s.name)).toEqual(['invoke_agent claude'])
+})
+
+test('session end flushes a turn that never completed', async ($, on) => {
+  const writes: { path: string; text: string }[] = []
+  bottom(on, '')
+  on('fs.write', (_, e) => {
+    writes.push(e)
+    return { value: undefined }
+  })
+
+  await $.turn.start({ text: 'half', turnId: 't1' } as never)
+  await $.session.end({ reason: 'clear', sessionId: 's1' } as never)
+
+  const root = lines(writes[0].text).find(s => s.name === 'invoke_agent claude')
+  expect(root?.status.message).toBe('session ended')
+})
+
+test('a subagent nests under the Agent call that spawned it', async ($, on) => {
+  const writes: { path: string; text: string }[] = []
+  bottom(on, '', async e => {
+    if (e.tool === 'Agent') {
+      await $.agent.spawn({ tool_use_id: 'tu9', prompt: 'p', description: 'd', subagentType: 'general-purpose' } as never)
+    }
+    return { result: { text: 'done' } }
+  })
+  on('fs.write', (_, e) => {
+    writes.push(e)
+    return { value: undefined }
+  })
+  on('agent.spawn', () => ({ model: 'haiku', agentId: 'a1' }) as never)
+
+  await $.turn.start({ text: 'delegate', turnId: 't1' } as never)
+  await $.tool.call({ tool: 'Agent', tool_use_id: 'tu9', prompt: 'p' } as never)
+  await $.turn.start({ text: 'p', turnId: 't2', agentId: 'a1' } as never)
+  await $.turn.complete({ turnId: 't2', agentId: 'a1', answer: 'done', durationMs: 1, isAborted: false } as never)
+  await $.turn.complete({ turnId: 't1', answer: 'done', durationMs: 2, isAborted: false } as never)
+
+  const spans = lines(writes[writes.length - 1].text)
+  const agentTool = spans.find(s => s.name === 'execute_tool Agent')
+  const sub = spans.find(s => s.name === 'invoke_agent general-purpose')
+  expect(sub?.parentSpanId).toBe(agentTool?.spanId ?? null)
+  expect(sub?.attributes['gen_ai.agent.id']).toBe('a1')
+})

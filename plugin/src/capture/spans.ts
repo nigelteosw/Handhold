@@ -1,18 +1,35 @@
+import type { Span, SpanStatus, StoredTurn, SpanKind } from '../../types'
 import { msToNano, newSpanId, newTraceId, SCHEMA_URL } from './otel'
-import type { Span, SpanKind, SpanStatus } from './otel'
 
 // The spans of one turn: one trace, opened and closed as the turn runs.
+// Serialises to StoredTurn so the open turn can live in $.state across hook calls.
 export class TurnSpans {
   readonly traceId: string
   readonly turnId: string
   readonly conversationId: string
-  private readonly openSpans = new Map<string, Span>()
-  private readonly doneSpans: Span[] = []
+  private readonly openSpans: Map<string, Span>
+  private readonly doneSpans: Span[]
 
-  constructor(turnId: string, conversationId: string, _nowMs: number) {
-    this.traceId = newTraceId()
+  constructor(turnId: string, conversationId: string, _nowMs: number, traceId?: string, open: Span[] = [], done: Span[] = []) {
+    this.traceId = traceId ?? newTraceId()
     this.turnId = turnId
     this.conversationId = conversationId
+    this.openSpans = new Map(open.map(s => [s.spanId, s]))
+    this.doneSpans = [...done]
+  }
+
+  static from(stored: StoredTurn): TurnSpans {
+    return new TurnSpans(stored.turnId, stored.conversationId, 0, stored.traceId, stored.open, stored.done)
+  }
+
+  toJSON(): StoredTurn {
+    return {
+      traceId: this.traceId,
+      turnId: this.turnId,
+      conversationId: this.conversationId,
+      open: [...this.openSpans.values()],
+      done: [...this.doneSpans],
+    }
   }
 
   open(
@@ -52,6 +69,10 @@ export class TurnSpans {
 
   closeAll(nowMs: number, status: SpanStatus): void {
     for (const spanId of [...this.openSpans.keys()]) this.close(spanId, nowMs, status)
+  }
+
+  isOpen(spanId: string): boolean {
+    return this.openSpans.has(spanId)
   }
 
   finished(): Span[] {
