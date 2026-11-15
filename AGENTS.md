@@ -18,3 +18,14 @@ claude plugin test plugin
 ```
 
 The tests import `claude-code/testing`, which resolves only under `claude plugin test`. Plain `tsx`/`node --test` cannot run them.
+
+## The Chat skill
+
+`chat-skill/handhold-review/SKILL.md` is generated from `plugin/src/mentor/rubric.ts` and `plugin/src/nudge/brief.ts`. Edit `chat-skill/template.md`, never the generated file. After changing the rubric, the brief or the template, rebuild it in the same PR:
+
+```bash
+node chat-skill/build.ts          # regenerate SKILL.md and dist/handhold-review.zip
+node chat-skill/build.ts --check  # fails if SKILL.md is out of date
+```
+
+It lives outside `plugin/`, so changing it alone needs no version bump.

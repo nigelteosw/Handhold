@@ -37,6 +37,15 @@ claude --plugin-dir /path/to/Handhold/plugin
 
 For sessions that cannot take a flag (for example the desktop app), set `CLAUDE_CODE_PLUGIN_DIRS` to the absolute path of `plugin/` in the `env` block of `~/.claude/settings.json`.
 
+## In the Chat tab
+
+The Chat tab (claude.ai on the web, or the desktop app's Chat tab) can't run plugins, so the full Handhold isn't available there. Two lighter versions are:
+
+- **The Handhold review skill.** Run `node chat-skill/build.ts` (Node 22.18 or later) to make `chat-skill/dist/handhold-review.zip`, then upload it in Claude under Settings → Capabilities → Skills. In any chat, ask Claude to review your prompting, or type `/handhold-review`. It reviews **this conversation only**: the one habit to work on, a before-and-after of your own prompt, and what the better prompt would have got you. It can't see other chats and keeps no history. It is generated from the plugin's rubric, so both judge the same way.
+- **The standing brief.** Paste the brief from `plugin/src/nudge/brief.ts` into Settings → Profile (preferences) or a Project's instructions, and Claude will offer the more ambitious version in every chat. The skill gives you this text too, if you ask it how.
+
+For history across sessions, reviews over time and the progress pane, use Claude Code (the terminal, or the desktop app's Code tab).
+
 ## Commands
 
 `/handhold <subcommand>` works wherever Claude Code runs plugin code. Where the `/` menu lists only skills (the desktop app's chat), the same subcommands are the skills `/review`, `/history` and `/forget`. In the terminal they appear as `/handhold:review` and so on. Each one costs a short model turn to call the tool, which `/handhold` doesn't.
@@ -129,7 +138,7 @@ Handhold has no server and no account. Traces stay on disk. The only network use
 
 - Claude only. Other AI tools are out of scope for now.
 - The fast judge is a cheap model, so it can miss requests a stronger model would score. That's a deliberate trade for speed and cost. Its scores are worth checking against the full judge's.
-- It works only where local plugins run: Claude Code and, when verified, the desktop app. It can't see the claude.ai chat tab.
+- It works only where local plugins run: Claude Code and, when verified, the desktop app. In the Chat tab there is only the review skill, which sees one conversation at a time (see "In the Chat tab").
 - There's no shared dashboard for teachers. Progress reaches others only through exported files that you choose to share.
 
 ## Development
