@@ -29,3 +29,13 @@ node chat-skill/build.ts --check  # fails if SKILL.md is out of date
 ```
 
 It lives outside `plugin/`, so changing it alone needs no version bump.
+
+## The Chat-tab MCP server
+
+`mcp-server/` bundles code from `plugin/src/reflect`, so a change there can break it. When you touch either, run:
+
+```bash
+cd mcp-server && npm test && npm run typecheck
+```
+
+Its version is in `mcp-server/manifest.json`, separate from the plugin's. Bump it when what the extension does changes.

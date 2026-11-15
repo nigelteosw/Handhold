@@ -14,7 +14,8 @@ Handhold scores each request on these three, nudges Claude to offer the more amb
 - **Claude desktop app, Claude Code session**: loads through `CLAUDE_CODE_PLUGIN_DIRS`. Checked in headless runs only; the interactive desktop check is still open.
 - **Claude desktop app, where plugins run with a skills-only `/` menu**: that menu never shows a command a plugin registers while it runs, so `/handhold` doesn't appear. Use the skills `/review`, `/history` and `/forget` instead; they call Handhold through its `mcp__handhold__handhold` tool. `/history` puts a summary in the chat as well as writing the page, because a browser may not open from there.
 - **Cowork mode**: not yet verified. Its sessions may run in a sandbox with their own trace folder, apart from the terminal's.
-- **The Chat tab** (claude.ai on the web, or the desktop app's Chat tab): not supported. Handhold's code and its skills don't load there, so `/history` typed in Chat is plain text: Claude will improvise an answer from memory, not from your traces. Use Claude Code (terminal or the desktop app's Code tab) for Handhold.
+- **The desktop app's Chat tab**: through the Handhold extension (`mcp-server/`), a separate install. It shows your history as a panel in the chat and writes reviews from your Claude Code traces. Chat itself isn't recorded. See "In the Chat tab".
+- **claude.ai on the web**: only the Chat skill, which reviews one conversation at a time. A web page can't reach the trace files on your machine.
 
 ## Install from GitHub
 
@@ -39,12 +40,14 @@ For sessions that cannot take a flag (for example the desktop app), set `CLAUDE_
 
 ## In the Chat tab
 
-The Chat tab (claude.ai on the web, or the desktop app's Chat tab) can't run plugins, so the full Handhold isn't available there. Two lighter versions are:
+The Chat tab can't run plugins, so Handhold reaches it in other ways:
+
+- **The Handhold extension (desktop app).** A local MCP server that reads the traces the plugin records and gives Chat your history as a panel in the conversation, plus reviews that Claude in the chat writes (and scores, for turns not yet scored). Install it from `mcp-server/`: see [its README](mcp-server/README.md). Ask "Show my Handhold history" or "Give me a Handhold review", or use `/history` and `/review`. It reviews your Claude Code work; Chat conversations aren't recorded.
 
 - **The Handhold review skill.** Run `node chat-skill/build.ts` (Node 22.18 or later) to make `chat-skill/dist/handhold-review.zip`, then upload it in Claude under Settings → Capabilities → Skills. In any chat, ask Claude to review your prompting, or type `/handhold-review`. It reviews **this conversation only**: the one habit to work on, a before-and-after of your own prompt, and what the better prompt would have got you. It can't see other chats and keeps no history. It is generated from the plugin's rubric, so both judge the same way.
 - **The standing brief.** Paste the brief from `plugin/src/nudge/brief.ts` into Settings → Profile (preferences) or a Project's instructions, and Claude will offer the more ambitious version in every chat. The skill gives you this text too, if you ask it how.
 
-For history across sessions, reviews over time and the progress pane, use Claude Code (the terminal, or the desktop app's Code tab).
+On claude.ai on the web, only the skill and the brief work. The progress pane, live coaching notes and exports need Claude Code (the terminal, or the desktop app's Code tab).
 
 ## Commands
 
@@ -138,7 +141,7 @@ Handhold has no server and no account. Traces stay on disk. The only network use
 
 - Claude only. Other AI tools are out of scope for now.
 - The fast judge is a cheap model, so it can miss requests a stronger model would score. That's a deliberate trade for speed and cost. Its scores are worth checking against the full judge's.
-- It works only where local plugins run: Claude Code and, when verified, the desktop app. In the Chat tab there is only the review skill, which sees one conversation at a time (see "In the Chat tab").
+- It works only where local plugins run: Claude Code and, when verified, the desktop app. In the desktop app's Chat tab, the extension shows and reviews your Claude Code traces, but Chat conversations themselves aren't recorded (see "In the Chat tab").
 - There's no shared dashboard for teachers. Progress reaches others only through exported files that you choose to share.
 
 ## Development
