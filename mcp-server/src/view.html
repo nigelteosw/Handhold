@@ -50,7 +50,8 @@ const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls)
 function render() {
   const coached = data.turns.filter(t => t.status === 'coached').length
   const unscored = data.turns.filter(t => t.status === 'unscored').length
-  meta.textContent = `${data.scope} · ${data.turns.length} turns · ${coached} coached · ${unscored} unscored`
+  const quick = data.turns.filter(t => t.status === 'quick').length
+  meta.textContent = [`${data.scope}`, `${data.turns.length} turns`, `${coached} coached`, quick ? `${quick} quick` : '', unscored ? `${unscored} waiting for a review` : ''].filter(Boolean).join(' · ')
   const rows = data.turns.filter(t => filter === 'all' || t.status === filter)
   list.replaceChildren()
   if (rows.length === 0) { list.append(el('li', 'empty', 'Nothing to show.')); return }
@@ -62,7 +63,7 @@ function render() {
       li.append(el('span', 'habit', `To work on: ${t.habit}`))
       if (t.rewrite) { const d = el('details'); d.append(el('summary', null, 'Try instead'), el('div', null, t.rewrite)); li.append(d) }
     } else {
-      li.append(el('span', 'status', t.status === 'skipped' ? 'No coaching needed' : 'Not scored yet'))
+      li.append(el('span', 'status', t.status === 'skipped' ? 'No coaching needed' : t.status === 'quick' ? 'Quick request' : 'Not scored yet: ask for a Handhold review'))
     }
     list.append(li)
   }
