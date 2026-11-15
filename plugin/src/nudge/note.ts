@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Engine } from 'claude-code'
+import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Assessment } from '../../types'
 import { addSpan } from '../capture/hooks'

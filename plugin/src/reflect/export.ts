@@ -1,4 +1,4 @@
-import type { Engine } from 'claude-code'
+import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Span } from '../../types'
 import type { Config } from '../shared/config'

@@ -1,4 +1,4 @@
-import type { Engine } from 'claude-code'
+import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Assessment, Dimension, Span, Technique } from '../../types'
 import { needsNudge } from '../mentor/assessment'

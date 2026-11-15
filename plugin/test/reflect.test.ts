@@ -6,6 +6,7 @@ import { progressReport, toOtlp } from '../src/reflect/export'
 import { recordDay } from '../src/reflect/stats'
 import type { ReadIo, TurnRecord } from '../src/reflect/read'
 import { defaultConfig } from './helpers'
+import type { KitOn } from './helpers'
 
 const assessment = (
   scores: [number, number, number],
@@ -219,7 +220,7 @@ const judgeJson = (altitude: number, technique: Technique = 'goal-beyond-the-goa
   })
 
 // The engine's bottom for a pane test: the model answers from `reply`, store is empty, nothing else needed.
-const paneBottom = (on: Parameters<Parameters<typeof test>[1]>[1], reply: (prompt: string) => string) => {
+const paneBottom = (on: KitOn, reply: (prompt: string) => string) => {
   on('env.get', () => ({ value: '/home/t' }))
   on('session.id', () => ({ value: 's1' }))
   on('ui.log', () => ({ value: undefined }))
@@ -229,7 +230,7 @@ const paneBottom = (on: Parameters<Parameters<typeof test>[1]>[1], reply: (promp
   on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  on('model.complete', (_, e) => ({ value: { isAnswered: true, text: reply(e.prompt), usage: { input_tokens: 1, output_tokens: 1, model: e.model } } }))
+  on('model.complete', (_, e) => ({ value: { isAnswered: true, text: reply(e.prompt), usage: { input_tokens: 1, output_tokens: 1 } } as never }))
 }
 
 test('the pane says so when no turn has been assessed', async ($, on) => {

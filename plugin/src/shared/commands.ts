@@ -1,4 +1,4 @@
-import type { Engine, On } from 'claude-code'
+import type { EngineInterface as Engine, On } from 'claude-code'
 
 import type { Config } from './config'
 import { exportCmd } from '../reflect/export'

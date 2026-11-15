@@ -1,5 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
+import type { KitOn } from './helpers'
+
 import {
   agentAttrs,
   chatAttrs,
@@ -172,7 +174,7 @@ const lines = (text: string): Span[] =>
 
 // The engine's bottom: what runs beneath the plugin for each event the tests raise.
 const bottom = (
-  on: Parameters<Parameters<typeof test>[1]>[1],
+  on: KitOn,
   answer: string,
   tool: (e: { tool: string }) => unknown = () => ({ result: { text: 'ok' } }),
 ) => {
@@ -217,6 +219,7 @@ test('capture writes one OTel tree per turn', async ($, on) => {
   const root = spans.find(s => s.name === 'invoke_agent claude')
   expect(JSON.stringify(root?.attributes['gen_ai.input.messages'])).toContain('"hi"')
   expect(JSON.stringify(root?.attributes['gen_ai.output.messages'])).toContain('"hello"')
+  expect(root?.status).toEqual({ code: 'OK' })
   expect(spans.find(s => s.name === 'chat claude-opus-5-5')?.attributes['gen_ai.usage.input_tokens']).toBe(5)
   expect(spans.find(s => s.name === 'execute_tool Bash')?.parentSpanId).toBe(root?.spanId ?? null)
 })
@@ -248,7 +251,7 @@ test('an aborted turn closes its open tool span with ERROR and the next turn sta
   await $.prompt.submit({ text: 'run it' } as never)
   await $.turn.start({ text: 'run it', turnId: 't1' } as never)
   void $.tool.call({ tool: 'Bash', command: 'sleep 9' } as never)
-  await new Promise(r => setTimeout(r, 10))
+  await new Promise<void>(r => (globalThis as unknown as { setTimeout: (f: () => void, ms: number) => void }).setTimeout(r, 10))
   await $.turn.complete({ turnId: 't1', answer: '', durationMs: 5, isAborted: true } as never)
 
   const spans = lines(writes[0].text)

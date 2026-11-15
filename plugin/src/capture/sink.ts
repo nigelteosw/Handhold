@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Engine } from 'claude-code'
+import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Config } from '../shared/config'
 import type { Span } from './otel'
@@ -87,7 +87,9 @@ export function sinkIo($: Engine): SinkIo {
     home: () => $.env.get('HOME'),
     write: (path, text) => $.fs.write(path, text),
     isWarned: () => read($, sinkWarned),
-    markWarned: () => update($, sinkWarned, () => true),
+    markWarned: async () => {
+      await update($, sinkWarned, () => true)
+    },
     status: text => $.ui.status(text),
   }
 }

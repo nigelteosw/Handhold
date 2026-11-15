@@ -1,5 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
+import type { KitOn } from './helpers'
+
 import { USAGE } from '../src/shared/commands'
 
 import { noteText } from '../src/nudge/note'
@@ -14,7 +16,7 @@ const composeInput = { model: 'claude-opus-5-5', promptModel: 'claude-opus-5-5',
 
 // The engine's bottom for the events these tests raise. The model answers from `reply`, keyed by the judge's prompt.
 const beneath = (
-  on: Parameters<Parameters<typeof test>[1]>[1],
+  on: KitOn,
   reply: (prompt: string) => string | Error,
   writes: Writes = [],
   sections: unknown[] = [],
@@ -24,7 +26,7 @@ const beneath = (
   on('ui.log', () => ({ value: undefined }))
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
-  on('prompt.compose', () => ({ sections }))
+  on('prompt.compose', () => ({ sections: sections as never }))
   on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
@@ -36,7 +38,7 @@ const beneath = (
   on('model.complete', (_, e) => {
     const out = reply(e.prompt)
     if (out instanceof Error) throw out
-    return { value: { isAnswered: true, text: out, usage: { input_tokens: 1, output_tokens: 1, model: e.model } } }
+    return { value: { isAnswered: true, text: out, usage: { input_tokens: 1, output_tokens: 1 } } as never }
   })
 }
 
@@ -133,7 +135,7 @@ test('back-to-back prompts keep their own assessment on their own turn', async (
   expect(techniqueOf(last('/home/t/.handhold/traces/s1/00002-t2.jsonl'))).toBe('challenge-assumptions')
 })
 
-const turn = async ($: Parameters<Parameters<typeof test>[1]>[0], i: number, prompt: string) => {
+const turn = async ($: Parameters<Extract<Parameters<typeof test>[1], (...args: never[]) => unknown>>[0], i: number, prompt: string) => {
   await $.prompt.submit({ text: prompt } as never)
   await $.turn.start({ text: prompt, turnId: `t${i}` } as never)
   return $.turn.complete({ turnId: `t${i}`, answer: 'ok', durationMs: 1, isAborted: false } as never)

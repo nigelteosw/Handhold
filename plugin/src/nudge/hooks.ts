@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Engine, On } from 'claude-code'
+import type { EngineInterface as Engine, On } from 'claude-code'
 
 import type { Assessment, Backoff, PendingAssess, Technique } from '../../types'
 import { addSpan } from '../capture/hooks'
@@ -27,13 +27,13 @@ export function registerNudge(on: On): void {
 }
 
 // Pre-send: judges the prompt and, when a dimension is low, hands Claude a hidden hint for this turn.
-export async function nudgePrompt(
+export async function nudgePrompt<R>(
   $: Engine,
   cfg: Config,
   e: { text: string; command?: unknown; isMeta?: boolean; context?: readonly string[] },
-  next: (e: never) => Promise<{ text: string; drop?: undefined }> | { text: string },
-): Promise<never> {
-  if (e.command || e.isMeta || isTrivial(e.text)) return next(e as never) as never
+  next: (e: never) => R,
+): Promise<R> {
+  if (e.command || e.isMeta || isTrivial(e.text)) return next(e as never)
 
   const recent = await read($, recentState)
   const lastRewrite = recent.at(-1)?.rewrite ?? ''
@@ -47,11 +47,11 @@ export async function nudgePrompt(
   if (assessment && needsNudge(assessment) && !isSuppressed(backoff, assessment.technique)) {
     backoff = { ...backoff, offered: assessment.technique }
     await update($, backoffState, () => backoff)
-    return next({ ...e, context: [...(e.context ?? []), hintFor(assessment)] } as never) as never
+    return next({ ...e, context: [...(e.context ?? []), hintFor(assessment)] } as never)
   }
 
   await update($, backoffState, () => backoff)
-  return next(e as never) as never
+  return next(e as never)
 }
 
 // After the turn starts: attaches the pre-send assessment to its own turn, matched by prompt text.

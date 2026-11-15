@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Engine, On } from 'claude-code'
+import type { EngineInterface as Engine, On } from 'claude-code'
 
 import type { CaptureState, Span } from '../../types'
 import type { Config } from '../shared/config'
@@ -49,7 +49,7 @@ const userMessage = (text: string): Record<string, unknown> => ({
   'gen_ai.input.messages': [{ role: 'user', parts: [{ type: 'text', content: text }] }],
 })
 
-const assistantMessage = (answer: string, toolUses: { name: string; input: unknown }[] = []) => [
+const assistantMessage = (answer: string, toolUses: readonly { name: string; input: unknown }[] = []) => [
   {
     role: 'assistant',
     parts: [
@@ -100,9 +100,10 @@ async function finishMain(
   const at = now()
 
   if (root) {
+    // The root closes first: closeAll would otherwise close it as unfinished.
     turn.set(root, { 'gen_ai.output.messages': assistantMessage(input.answer) })
-    turn.closeAll(at, { code: 'ERROR', message: input.closeOpenWith })
     turn.close(root, at, input.message ? { code: input.status, message: input.message } : { code: input.status })
+    turn.closeAll(at, { code: 'ERROR', message: input.closeOpenWith })
   }
 
   const seq = s.seq + 1
@@ -252,7 +253,6 @@ export async function closeTurn($: Engine, cfg: Config, e: { turnId: string; age
       listeners,
     )
   }
-  return
 
   return null
 }

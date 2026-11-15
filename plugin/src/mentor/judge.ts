@@ -1,4 +1,4 @@
-import type { Engine } from 'claude-code'
+import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Assessment } from '../../types'
 import type { Config } from '../shared/config'
