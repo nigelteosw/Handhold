@@ -1,5 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
+import { USAGE } from '../src/shared/commands'
+
+import { noteText } from '../src/nudge/note'
+import { parseAssessment } from '../src/mentor/assessment'
 import * as churn from './fixtures/churn'
 import * as qbr from './fixtures/qbr'
 import * as trivial from './fixtures/trivial'
@@ -121,7 +125,77 @@ test('back-to-back prompts keep their own assessment on their own turn', async (
     return assess?.attributes['handhold.technique']
   }
 
-  expect(writes.length).toBe(2)
-  expect(techniqueOf(writes[0].text)).toBe('goal-beyond-the-goal')
-  expect(techniqueOf(writes[1].text)).toBe('challenge-assumptions')
+  // Each turn is written again when its post-answer span is added: the last write of a path is the whole turn.
+  const last = (path: string): string => writes.filter(w => w.path === path).at(-1)?.text ?? ''
+  expect(techniqueOf(last('/home/t/.handhold/traces/s1/00001-t1.jsonl'))).toBe('goal-beyond-the-goal')
+  expect(techniqueOf(last('/home/t/.handhold/traces/s1/00002-t2.jsonl'))).toBe('challenge-assumptions')
+})
+
+const turn = async ($: Parameters<Parameters<typeof test>[1]>[0], i: number, prompt: string) => {
+  await $.prompt.submit({ text: prompt } as never)
+  await $.turn.start({ text: prompt, turnId: `t${i}` } as never)
+  return $.turn.complete({ turnId: `t${i}`, answer: 'ok', durationMs: 1, isAborted: false } as never)
+}
+
+test('a coaching note shows at most once every three turns', async ($, on) => {
+  beneath(on, modelReplyFor)
+  const shown: number[] = []
+  let text = ''
+
+  for (let i = 1; i <= 6; i++) {
+    const r = await turn($, i, qbr.prompt)
+    if (r.text) {
+      shown.push(i)
+      text = r.text
+    }
+  }
+
+  expect(shown).toEqual([1, 4])
+  expect(text).toBe(noteText(parseAssessment(qbr.judgeReply) as never))
+})
+
+test('quiet mutes notes and quiet off restores them', async ($, on) => {
+  beneath(on, modelReplyFor)
+  const command = (args: string) =>
+    $.command.run({ command: 'handhold', args, origin: { kind: 'composer' } } as never) as Promise<{ text: string }>
+
+  const shown: number[] = []
+  if ((await turn($, 1, qbr.prompt)).text) shown.push(1)
+  expect((await command('quiet')).text).toBe('Handhold notes muted for this session.')
+  for (let i = 2; i <= 4; i++) if ((await turn($, i, qbr.prompt)).text) shown.push(i)
+  expect((await command('quiet off')).text).toBe('Handhold notes on.')
+  if ((await turn($, 5, qbr.prompt)).text) shown.push(5)
+
+  expect(shown).toEqual([1, 5])
+})
+
+test('the post-answer assessment is written as a span on the turn', async ($, on) => {
+  const writes: Writes = []
+  beneath(on, modelReplyFor, writes)
+
+  await turn($, 1, qbr.prompt)
+
+  const file = writes.filter(w => w.path.endsWith('00001-t1.jsonl')).at(-1)?.text ?? ''
+  const assess = file
+    .trim()
+    .split('\n')
+    .map(line => JSON.parse(line) as { name: string; attributes: Record<string, unknown> })
+    .filter(s => s.name === 'handhold.assess')
+  expect(assess.map(s => s.attributes['handhold.judge.phase'])).toEqual(['pre', 'post'])
+})
+
+test('a post-answer judge failure leaves the answer as it was', async ($, on) => {
+  beneath(on, () => new Error('timeout'))
+
+  const r = await turn($, 1, qbr.prompt)
+
+  expect(r.text).toBe('')
+})
+
+test('an unknown /handhold word shows the usage line', async ($, on) => {
+  beneath(on, modelReplyFor)
+
+  const r = (await $.command.run({ command: 'handhold', args: 'nonsense', origin: { kind: 'composer' } } as never)) as { text: string }
+
+  expect(r.text).toBe(USAGE)
 })

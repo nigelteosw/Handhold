@@ -76,6 +76,8 @@ declare module 'claude-code' {
       backoff: Shaped<Backoff>
       recent: Shaped<Assessment[]>
       pendingAssess: Shaped<PendingAssess>
+      quiet: Shaped<boolean>
+      turnsSinceNote: Shaped<number>
     }
   }
 }

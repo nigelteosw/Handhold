@@ -63,3 +63,12 @@ export async function attachAssess($: Engine, cfg: Config, e: { text: string; tu
   }
   await update($, pendingState, () => null)
 }
+
+// The last assessments of the session, for the judge's context. Read and written here, where the atom is defined.
+export async function recentAssessments($: Engine): Promise<Assessment[]> {
+  return read($, recentState)
+}
+
+export async function recordAssessment($: Engine, a: Assessment): Promise<void> {
+  await update($, recentState, list => [...list, a].slice(-5))
+}

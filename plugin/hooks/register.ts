@@ -2,15 +2,24 @@ import type { Register } from 'claude-code'
 
 import { closeTurn, openTurn, recordPrompt, registerCapture } from '../src/capture/hooks'
 import { attachAssess, nudgePrompt, registerNudge } from '../src/nudge/hooks'
+import { noteText } from '../src/nudge/note'
+import { postAssess, throttle } from '../src/nudge/note'
 import { readConfig } from '../src/shared/config'
+import { registerCommands } from '../src/shared/commands'
 import { fallThrough } from '../src/shared/safe'
 
-// One registration per event: capture and nudge each contribute to the same hook.
+// One registration per event: capture and nudge each contribute to the same hook, in this order.
 export const register: Register = (on, options) => {
   const cfg = readConfig(options as Record<string, unknown>)
 
   registerCapture(on, cfg)
   registerNudge(on)
+
+  registerCommands(on, {
+    review: async () => ({ text: 'Not available yet.' }),
+    export: async () => ({ text: 'Not available yet.' }),
+    pane: async () => ({ text: 'Not available yet.' }),
+  })
 
   on('prompt.submit', async ($, e, next) => {
     await recordPrompt($, e)
@@ -25,7 +34,12 @@ export const register: Register = (on, options) => {
   }).catch(fallThrough)
 
   on('turn.complete', async ($, e, next) => {
-    await closeTurn($, cfg, e)
-    return next(e)
+    const closed = await closeTurn($, cfg, e)
+    const result = await next(e)
+    if (!closed) return result
+
+    const a = await postAssess($, cfg, closed)
+    const show = a !== null && (await throttle($, a, cfg.noteEvery))
+    return show && a ? { ...result, text: noteText(a) } : result
   }).catch(fallThrough)
 }

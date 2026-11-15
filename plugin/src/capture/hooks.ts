@@ -91,9 +91,9 @@ async function finishMain(
   cfg: Config,
   input: FinishInput,
   listeners: ((t: ClosedTurn) => void)[],
-): Promise<void> {
+): Promise<ClosedTurn | null> {
   const s = await read($, captureState)
-  if (!s.main || !s.mainTurnId) return
+  if (!s.main || !s.mainTurnId) return null
   const turnId = s.mainTurnId
   const turn = TurnSpans.from(s.main)
   const root = s.turnRoots[turnId]
@@ -131,6 +131,7 @@ async function finishMain(
       // A listener's failure must not change the turn.
     }
   }
+  return closed
 }
 
 function summarise(
@@ -222,7 +223,7 @@ export async function openTurn($: Engine, cfg: Config, e: { text: string; turnId
 }
 
 // Bookkeeping when a turn ends: closes its spans, writes its file, notifies listeners.
-export async function closeTurn($: Engine, cfg: Config, e: { turnId: string; agentId?: string; answer: string; durationMs: number; isAborted: boolean }): Promise<void> {
+export async function closeTurn($: Engine, cfg: Config, e: { turnId: string; agentId?: string; answer: string; durationMs: number; isAborted: boolean }): Promise<ClosedTurn | null> {
   const s = await read($, captureState)
 
   if (e.agentId) {
@@ -233,11 +234,11 @@ export async function closeTurn($: Engine, cfg: Config, e: { turnId: string; age
         turn.close(root, now(), e.isAborted ? { code: 'ERROR', message: 'aborted' } : { code: 'OK' })
       })
     }
-    return
+    return null
   }
 
   if (s.mainTurnId === e.turnId) {
-    await finishMain(
+    return finishMain(
       $,
       cfg,
       {
@@ -252,6 +253,8 @@ export async function closeTurn($: Engine, cfg: Config, e: { turnId: string; age
     )
   }
   return
+
+  return null
 }
 
 export function registerCapture(on: On, cfg: Config): void {
