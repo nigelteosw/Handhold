@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import type { Assessment, Span } from '../types'
 import { parseBatch } from '../src/mentor/judge'
-import { embedJson, historyHtml, historyTurn } from '../src/reflect/history'
+import { embedJson, historyDataJs, historyHtml, historyTurn, LIVE_FOR_MS, parseLive, scopeOf, wordOf } from '../src/reflect/history'
 import type { TraceFile } from '../src/reflect/read'
 import { scoringLine } from '../src/reflect/review'
 import { scoreUnscored } from '../src/reflect/score'
@@ -187,4 +187,57 @@ test('the history page cannot be broken out of by a prompt', () => {
   expect(embedJson(evil)).not.toContain('<')
   expect(html.split('</script>').length).toBe(3)
   expect(html).not.toContain('alert(1)</script>')
+})
+
+test('the live data file hands the payload to the page and cannot close a script tag', () => {
+  const t = historyTurn(fileOf(1, '</script><b>hi</b>'))
+  const js = historyDataJs({ generatedMs: 5, scope: 'All time', turns: t ? [t] : [] })
+
+  expect(js.startsWith('window.handholdHistory && window.handholdHistory({')).toBe(true)
+  expect(js).not.toContain('<')
+  const got: unknown = JSON.parse(js.slice(js.indexOf('(', js.indexOf('&&')) + 1, js.lastIndexOf(');')))
+  expect((got as { turns: { prompt: string }[] }).turns[0]?.prompt).toBe('</script><b>hi</b>')
+})
+
+test('the history page polls its data file and allows loading it from disk', () => {
+  const html = historyHtml([], 0, 'All time')
+  expect(html).toContain("'history-data.js'")
+  expect(html).toContain('file:')
+})
+
+test('a live history view keeps its scope and rolls its window forward', () => {
+  expect(wordOf('')).toBe('month')
+  expect(wordOf('week extra')).toBe('week')
+  expect(wordOf('bogus')).toBe('month')
+  expect(scopeOf({ word: 'week', openedMs: 0 }, 10 * 86400000)?.scope).toEqual({ sinceMs: 3 * 86400000 })
+  expect(scopeOf({ word: 'session', sessionId: 's9', openedMs: 0 }, 1)?.scope).toEqual({ sessionId: 's9' })
+  expect(scopeOf({ word: 'session', openedMs: 0 }, 1)).toBeNull()
+  expect(parseLive('{"word":"all","openedMs":3}')).toEqual({ word: 'all', openedMs: 3 })
+  expect(parseLive('{"word":"nope","openedMs":3}')).toBeNull()
+  expect(parseLive('not json')).toBeNull()
+})
+
+const liveTurn = async ($: Parameters<Parameters<typeof test>[1]>[0], on: KitOn, openedMs: number): Promise<Writes> => {
+  const writes: Writes = []
+  beneath(on, () => {}, writes)
+  on('fs.read', (_, e) => {
+    if (e.path.endsWith('history-live.json')) return { value: JSON.stringify({ word: 'all', openedMs }) }
+    throw new Error('missing')
+  })
+  on('fs.list', () => ({ value: [] }))
+  await $.prompt.submit({ text: qbr.prompt } as never)
+  await $.turn.start({ text: qbr.prompt, turnId: 't1' } as never)
+  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false } as never)
+  return writes
+}
+
+test('an open history page gets its data file rewritten when a turn ends', async ($, on) => {
+  const writes = await liveTurn($, on, Date.now())
+  const data = writes.find(w => w.path === '/home/t/.handhold/history-data.js')
+  expect(data?.text).toContain('"scope":"All time"')
+})
+
+test('a history page opened long ago is left alone', async ($, on) => {
+  const writes = await liveTurn($, on, Date.now() - LIVE_FOR_MS - 1000)
+  expect(writes.some(w => w.path.endsWith('history-data.js'))).toBe(false)
 })

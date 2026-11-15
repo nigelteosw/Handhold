@@ -3,7 +3,7 @@ import type { EngineInterface as Engine, On } from 'claude-code'
 import type { Config } from './config'
 import { exportCmd } from '../reflect/export'
 import { forgetCmd } from '../reflect/forget'
-import { historyCmd } from '../reflect/history'
+import { historyCmd, refreshHistory } from '../reflect/history'
 import { openPane } from '../reflect/pane'
 import { review } from '../reflect/review'
 import { setQuiet } from '../nudge/note'
@@ -22,9 +22,19 @@ export async function route($: Engine, cfg: Config, args: string): Promise<{ tex
     await setQuiet($, !off)
     return { text: off ? 'Handhold notes on.' : 'Handhold notes muted for this session.' }
   }
-  if (word === 'review') return review($, cfg, tail)
+  if (word === 'review') {
+    const r = await review($, cfg, tail)
+    // Review writes scores into the traces; an open history page shows them without a reopen.
+    await refreshHistory($, cfg)
+    return r
+  }
   if (word === 'history') return historyCmd($, cfg, tail)
-  if (word === 'forget') return forgetCmd($, cfg, tail)
+  if (word === 'forget') {
+    const r = await forgetCmd($, cfg, tail)
+    // Forgotten turns leave an open history page too.
+    await refreshHistory($, cfg)
+    return r
+  }
   if (word === 'export') return exportCmd($, cfg, tail)
   if (word === 'pane') return openPane($)
   return { text: USAGE }
