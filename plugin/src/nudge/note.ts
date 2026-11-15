@@ -5,6 +5,7 @@ import type { Assessment } from '../../types'
 import { addSpan } from '../capture/hooks'
 import type { ClosedTurn } from '../capture/hooks'
 import { assessAttrs, needsNudge } from '../mentor/assessment'
+import { isTrivial } from '../mentor/gate'
 import { judge } from '../mentor/judge'
 import type { Config } from '../shared/config'
 import { recentAssessments, recordAssessment } from './hooks'
@@ -56,6 +57,7 @@ export async function setQuiet($: Engine, isQuiet: boolean): Promise<void> {
 
 // Post-answer: the full judge scores the closed turn, records the span on its file, and remembers the result.
 export async function postAssess($: Engine, cfg: Config, t: ClosedTurn): Promise<Assessment | null> {
+  if (isTrivial(t.prompt)) return null
   const a = await judge(
     $,
     { prompt: t.prompt, phase: 'post', turnSummary: summarize(t), recent: await recentAssessments($) },

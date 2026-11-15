@@ -203,3 +203,15 @@ test('an unknown /handhold word shows the usage line', async ($, on) => {
 
   expect(r.text).toBe(USAGE)
 })
+
+test('a trivial turn makes no post-answer model call', async ($, on) => {
+  let calls = 0
+  beneath(on, () => {
+    calls++
+    return trivial.judgeReply
+  })
+
+  await turn($, 1, trivial.prompt)
+
+  expect(calls).toBe(0)
+})
