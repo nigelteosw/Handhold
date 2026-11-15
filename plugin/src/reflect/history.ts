@@ -1,6 +1,7 @@
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Assessment, Span } from '../../types'
+import { isQuickRequest } from '../mentor/gate'
 import { techniqueLabel } from '../mentor/rubric'
 import type { Config } from '../shared/config'
 import { DATA_CALLBACK, DATA_FILE, pageHtml } from './history-page'
@@ -23,6 +24,8 @@ export type HistoryTurn = {
   tools: { name: string; ms: number; ok: boolean }[]
   agents: string[]
   aborted: boolean
+  // A command or trivial request: never scored, so not waiting on a review.
+  quick: boolean
   assess: (Assessment & { techniqueLabel: string }) | null
 }
 
@@ -72,6 +75,7 @@ export function historyTurn(file: TraceFile): HistoryTurn | null {
       .filter(s => s.name.startsWith('invoke_agent ') && s.spanId !== root.spanId)
       .map(s => s.name.slice('invoke_agent '.length)),
     aborted: root.status?.code === 'ERROR',
+    quick: !a && isQuickRequest(record.prompt),
     assess: a ? { ...a, techniqueLabel: a.warranted ? techniqueLabel(a.technique) : '' } : null,
   }
 }
@@ -181,7 +185,7 @@ const short = (s: string, n: number): string => {
 
 // What came of a turn, in words rather than rubric numbers.
 const outcome = (t: HistoryTurn): string => {
-  if (!t.assess) return 'not scored'
+  if (!t.assess) return t.quick ? 'quick request' : 'not scored yet'
   if (!t.assess.warranted) return 'no coaching needed'
   return `to work on: ${t.assess.techniqueLabel}`
 }
@@ -192,7 +196,10 @@ export function historySummary(turns: HistoryTurn[], scopeLabel: string): string
   if (turns.length === 0) return `${scopeLabel}: no turns recorded yet.`
   const newest = [...turns].sort((a, b) => b.startMs - a.startMs)
   const scored = turns.filter(t => t.assess).length
-  const lines = [`${scopeLabel}: ${turns.length} turn${turns.length === 1 ? '' : 's'}, ${scored} scored.`]
+  const quick = turns.filter(t => !t.assess && t.quick).length
+  const waiting = turns.length - scored - quick
+  const parts = [`${scored} scored`, quick > 0 ? `${quick} quick` : '', waiting > 0 ? `${waiting} waiting for a review` : '']
+  const lines = [`${scopeLabel}: ${turns.length} turn${turns.length === 1 ? '' : 's'} (${parts.filter(Boolean).join(', ')}).`]
 
   const coached = newest.find(t => t.assess?.warranted && t.assess.rewrite)
   if (coached?.assess) {
@@ -216,7 +223,7 @@ export async function historyCmd($: Engine, cfg: Config, args: string): Promise<
   await $.fs.write(p.data, historyDataJs(payload))
   await $.fs.write(p.live, JSON.stringify(live))
   const opened = await openInBrowser($, p.page)
-  const unscored = payload.turns.filter(t => !t.assess).length
+  const unscored = payload.turns.filter(t => !t.assess && !t.quick).length
   const page = opened
     ? `Opened the full page in your browser (${p.page}). It updates live while open.`
     : `The full page is at ${p.page}. No browser could be opened from here: open that file on the machine that ran this.`

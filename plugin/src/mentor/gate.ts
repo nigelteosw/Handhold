@@ -4,6 +4,12 @@ const GREETING = /^(hi|hello|hey|thanks|thank you|ok|okay)\b/i
 const SHORT = 25
 const SHORT_GREETING = 60
 
+// A command, an empty prompt or a trivial one: never scored, and shown as a quick request, not as unfinished work.
+export function isQuickRequest(prompt: string): boolean {
+  const p = prompt.trim()
+  return p === '' || p.startsWith('/') || isTrivial(p)
+}
+
 export function isTrivial(prompt: string): boolean {
   const p = prompt.trim()
   if (p.length < SHORT) return true

@@ -1,6 +1,6 @@
 import type { Assessment, Span } from '../../types'
 import { assessAttrs } from '../mentor/assessment'
-import { isTrivial } from '../mentor/gate'
+import { isQuickRequest } from '../mentor/gate'
 import { msToNano, newSpanId, SCHEMA_URL } from '../capture/otel'
 import type { Config } from '../shared/config'
 import { samePrompt, toTurnRecord, traceRoot } from './read'
@@ -17,8 +17,7 @@ export type ScoreResult = { scored: Scored[]; left: number }
 // A turn still needs a score when nothing has judged it and it is not a command or a trivial request.
 export function needsScore(t: TurnRecord): boolean {
   if (t.assess.post || t.assess.pre) return false
-  const p = t.prompt.trim()
-  return p !== '' && !p.startsWith('/') && !isTrivial(p)
+  return !isQuickRequest(t.prompt)
 }
 
 // The handhold.assess span a review adds to a finished turn, under the turn's root span.

@@ -1,0 +1,36 @@
+{
+  "manifest_version": "0.2",
+  "name": "handhold",
+  "display_name": "Handhold",
+  "version": "0.1.0",
+  "description": "Your Handhold history and reviews in the Chat tab, from the traces the Handhold plugin records in Claude Code.",
+  "long_description": "Handhold mentors you to be more ambitious when you work with Claude. This extension reads the trace files the Handhold plugin writes on your machine and gives the Chat tab a history panel and reviews. It records nothing itself, has no server and makes no network calls; Claude in your chat writes the reviews and scores.",
+  "author": { "name": "Nigel Teo", "url": "https://github.com/nigelteosw" },
+  "repository": { "type": "git", "url": "https://github.com/nigelteosw/Handhold" },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/server.mjs"],
+      "env": { "HANDHOLD_TRACE_ROOT": "${user_config.trace_root}" }
+    }
+  },
+  "tools": [
+    { "name": "handhold_history", "description": "Your Handhold history as a panel in the chat" },
+    { "name": "handhold_review_data", "description": "Your Handhold turns, for Claude to write a review" },
+    { "name": "handhold_save_scores", "description": "Saves the scores Claude gives unscored turns" }
+  ],
+  "user_config": {
+    "trace_root": {
+      "type": "directory",
+      "title": "Trace folder",
+      "description": "Where the Handhold plugin writes its traces",
+      "default": "${HOME}/.handhold/traces",
+      "required": true
+    }
+  },
+  "compatibility": { "platforms": ["darwin", "win32", "linux"], "runtimes": { "node": ">=22.0.0" } },
+  "keywords": ["handhold", "mentor", "ambition", "history"]
+}

@@ -356,7 +356,7 @@ function showTip(target, text) {
 function hideTip() { if (tip) tip.classList.remove('on'); }
 
 /* Toolbar */
-var FILTERS = [['all', 'All', function () { return true; }], ['scored', 'Scored', isScored], ['low', 'Low scores', isLow], ['unscored', 'Not scored', function (t) { return !t.assess; }]];
+var FILTERS = [['all', 'All', function () { return true; }], ['scored', 'Scored', isScored], ['low', 'Low scores', isLow], ['unscored', 'Not scored', function (t) { return !t.assess && !t.quick; }]];
 function renderFilters() {
   var seg = byId('seg'); seg.replaceChildren();
   FILTERS.forEach(function (f) {
@@ -452,6 +452,7 @@ function buildTurn(t, isFresh) {
   var scores = el('div', 'scores');
   if (isScored(t)) DIMS.forEach(function (x) { var p = el('span', 'pill num s' + t.assess.scores[x[0]], x[2] + ' ' + t.assess.scores[x[0]]); p.title = x[1] + ' ' + t.assess.scores[x[0]] + ' of 3'; scores.append(p); });
   else if (t.assess) scores.append(el('span', 'pill mute', 'not warranted'));
+  else if (t.quick) scores.append(el('span', 'pill mute', 'quick request'));
   else scores.append(el('span', 'pill dash', 'unscored'));
   s.append(el('span', 'time num', hm(t.startMs)), mid, scores);
   d.append(s);

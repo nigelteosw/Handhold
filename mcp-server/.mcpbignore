@@ -1,0 +1,11 @@
+node_modules/
+src/
+test/
+out/
+build.mjs
+tsconfig.json
+package.json
+package-lock.json
+README.md
+.gitignore
+.mcpbignore

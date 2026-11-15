@@ -177,6 +177,9 @@ test('historyTurn summarises a turn without tool arguments or results', () => {
   expect(t?.tools).toEqual([{ name: 'Bash', ms: 1500, ok: true }])
   expect(JSON.stringify(t)).not.toContain('TOPSECRET')
   expect(t?.assess).toBeNull()
+  expect(t?.quick).toBe(false)
+  expect(historyTurn(fileOf(2, 'merge it'))?.quick).toBe(true)
+  expect(historyTurn(fileOf(3, '/handhold review'))?.quick).toBe(true)
 })
 
 test('the history summary for the chat counts turns and shows the latest suggestion', () => {
@@ -190,13 +193,13 @@ test('the history summary for the chat counts turns and shows the latest suggest
   ]
   const text = historySummary(turns, 'Last 30 days')
 
-  expect(text).toContain('Last 30 days: 2 turns, 1 scored.')
+  expect(text).toContain('Last 30 days: 2 turns (1 scored, 1 quick).')
   expect(text).toContain(`Latest suggestion, for "${qbr.prompt}"`)
   expect(text).toContain(`Try: ${a.rewrite}`)
   expect(text).toContain('to work on: Aim at the goal behind the request')
   // Newest first, each with what came of it.
   expect(text.indexOf(qbr.prompt.slice(0, 20))).toBeLessThan(text.indexOf('merge it'))
-  expect(text).toContain('"merge it" · not scored')
+  expect(text).toContain('"merge it" · quick request')
   expect(historySummary([], 'This session')).toBe('This session: no turns recorded yet.')
 })
 
