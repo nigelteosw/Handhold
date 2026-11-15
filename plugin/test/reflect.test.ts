@@ -268,7 +268,7 @@ test('the pane shows the techniques being backed off', async ($, on) => {
   await $.prompt.submit({ text: 'And then summarise the churn trend for the board deck' } as never)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /Backing off/ }))?.text).toBe('Backing off: goal-beyond-the-goal')
+  expect((await ui.find({ type: 'Text', text: /Backing off/ }))?.text).toBe('Backing off: Aim at the goal behind the request')
   await ui.unmount()
 })
 

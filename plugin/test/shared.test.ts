@@ -6,7 +6,8 @@ import { fallThrough } from '../src/shared/safe'
 test('readConfig fills the manifest defaults', () => {
   expect(readConfig({})).toEqual({
     fastModel: 'claude-haiku-5-5',
-    fullModel: 'claude-opus-5-5',
+    turnModel: 'claude-haiku-5-5',
+    reviewModel: 'claude-opus-5-5',
     preTimeoutMs: 2000,
     postTimeoutMs: 20000,
     redact: 'none',

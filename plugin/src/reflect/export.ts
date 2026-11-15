@@ -2,6 +2,7 @@ import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Span } from '../../types'
 import type { Config } from '../shared/config'
+import { techniqueLabel } from '../mentor/rubric'
 import { aggregate, readIo, readTraceFiles, readTurns } from './read'
 import type { Aggregate } from './read'
 
@@ -66,7 +67,7 @@ export function progressReport(agg: Aggregate, range: string): string {
     `| Range | ${f(agg.avg.range)} |`,
     '',
     '## Most missed techniques',
-    ...(agg.missed.length > 0 ? agg.missed.map(m => `- ${m.technique} (${m.count})`) : ['- none']),
+    ...(agg.missed.length > 0 ? agg.missed.map(m => `- ${techniqueLabel(m.technique)} (${m.count})`) : ['- none']),
     '',
     '## Before and after',
     ...agg.worst.map(t => {

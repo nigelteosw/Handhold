@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine } from 'claude-code'
 
 import type { Assessment, Dimension } from '../../types'
-import { DIMENSIONS } from '../mentor/rubric'
+import { DIMENSIONS, techniqueLabel } from '../mentor/rubric'
 import { suppressedTechniques } from '../nudge/hooks'
 import { label, recordDay, windowAverage } from './stats'
 import type { DayStats } from './stats'
@@ -47,7 +47,7 @@ export async function drawPane($: Engine, e: Parameters<Engine['ui']['resolve']>
         const session = stats[d].n === 0 ? 0 : stats[d].sum / stats[d].n
         return <Text>{`${label(d)}  session ${fmt(session)} · 7 days ${fmt(week[d])}`}</Text>
       })}
-      {suppressed.length > 0 && <Text dimColor>{`Backing off: ${suppressed.join(', ')}`}</Text>}
+      {suppressed.length > 0 && <Text dimColor>{`Backing off: ${suppressed.map(techniqueLabel).join(', ')}`}</Text>}
     </Box>
   )
 }
