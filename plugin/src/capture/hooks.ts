@@ -19,16 +19,6 @@ export type ClosedTurn = {
   durationMs: number
 }
 
-export type CaptureApi = {
-  onTurnClosed(cb: (t: ClosedTurn) => void): void
-  addSpan(
-    $: Engine,
-    turnId: string,
-    name: string,
-    attributes: Record<string, unknown>,
-  ): Promise<boolean>
-}
-
 const EMPTY: CaptureState = {
   seq: 0,
   pendingPrompt: '',
@@ -47,6 +37,13 @@ const captureState = atom({ plugin: 'handhold', key: 'capture' } as const, EMPTY
 })
 
 const now = (): number => Date.now()
+
+// Module-level, so other registrations can subscribe without keeping a returned value.
+const listeners: ((t: ClosedTurn) => void)[] = []
+
+export function onTurnClosed(cb: (t: ClosedTurn) => void): void {
+  listeners.push(cb)
+}
 
 const userMessage = (text: string): Record<string, unknown> => ({
   'gen_ai.input.messages': [{ role: 'user', parts: [{ type: 'text', content: text }] }],
@@ -161,71 +158,103 @@ function summarise(
   }
 }
 
-export function registerCapture(on: On, cfg: Config): CaptureApi {
-  const listeners: ((t: ClosedTurn) => void)[] = []
+// Bookkeeping for a prompt the person sent: remembered for the turn it starts.
+export async function recordPrompt($: Engine, e: { text: string; command?: unknown; isMeta?: boolean }): Promise<void> {
+  if (!e.command && !e.isMeta) {
+    await update($, captureState, s => ({ ...s, pendingPrompt: e.text }))
+  }
+}
 
-  on('prompt.submit', async ($, e, next) => {
-    if (!e.command && !e.isMeta) {
-      await update($, captureState, s => ({ ...s, pendingPrompt: e.text }))
-    }
-    return next(e)
-  }).catch(fallThrough)
+// Bookkeeping when a turn (the main loop's or a subagent's) starts.
+export async function openTurn($: Engine, cfg: Config, e: { text: string; turnId: string; agentId?: string }): Promise<void> {
+  const sid = await $.session.id()
+  const s = await read($, captureState)
 
-  on('turn.start', async ($, e, next) => {
-    const sid = await $.session.id()
-    const s = await read($, captureState)
-
-    if (e.agentId) {
-      const spawn = s.agentSpawns[e.agentId]
-      if (s.main && spawn) {
-        const turn = TurnSpans.from(s.main)
-        const root = turn.open(
-          `invoke_agent ${spawn.subagentType}`,
-          'INTERNAL',
-          spawn.parentSpanId,
-          agentAttrs(sid, { id: e.agentId, name: spawn.subagentType }),
-          now(),
-        )
-        await update($, captureState, cur => ({
-          ...cur,
-          main: turn.toJSON(),
-          turnRoots: { ...cur.turnRoots, [e.turnId]: root },
-          agentRoots: { ...cur.agentRoots, [e.agentId as string]: root },
-        }))
-      }
-      return next(e)
-    }
-
-    if (s.main) {
-      await finishMain(
-        $,
-        cfg,
-        { status: 'ERROR', message: 'turn not completed', answer: '', durationMs: 0, isAborted: true, closeOpenWith: 'turn not completed' },
-        listeners,
+  if (e.agentId) {
+    const spawn = s.agentSpawns[e.agentId]
+    if (s.main && spawn) {
+      const turn = TurnSpans.from(s.main)
+      const root = turn.open(
+        `invoke_agent ${spawn.subagentType}`,
+        'INTERNAL',
+        spawn.parentSpanId,
+        agentAttrs(sid, { id: e.agentId, name: spawn.subagentType }),
+        now(),
       )
+      await update($, captureState, cur => ({
+        ...cur,
+        main: turn.toJSON(),
+        turnRoots: { ...cur.turnRoots, [e.turnId]: root },
+        agentRoots: { ...cur.agentRoots, [e.agentId as string]: root },
+      }))
     }
+    return
+  }
 
-    const turn = new TurnSpans(e.turnId, sid, now())
-    const root = turn.open(
-      'invoke_agent claude',
-      'INTERNAL',
-      null,
-      { ...agentAttrs(sid), ...userMessage(s.pendingPrompt) },
-      now(),
+  if (s.main) {
+    await finishMain(
+      $,
+      cfg,
+      { status: 'ERROR', message: 'turn not completed', answer: '', durationMs: 0, isAborted: true, closeOpenWith: 'turn not completed' },
+      listeners,
     )
-    await update($, captureState, cur => ({
-      ...cur,
-      main: turn.toJSON(),
-      mainTurnId: e.turnId,
-      turnRoots: { [e.turnId]: root },
-      agentRoots: {},
-      agentSpawns: {},
-      toolCalls: {},
-      lastClosed: null,
-    }))
-    return next(e)
-  }).catch(fallThrough)
+  }
 
+  const turn = new TurnSpans(e.turnId, sid, now())
+  const root = turn.open(
+    'invoke_agent claude',
+    'INTERNAL',
+    null,
+    { ...agentAttrs(sid), ...userMessage(s.pendingPrompt) },
+    now(),
+  )
+  await update($, captureState, cur => ({
+    ...cur,
+    main: turn.toJSON(),
+    mainTurnId: e.turnId,
+    turnRoots: { [e.turnId]: root },
+    agentRoots: {},
+    agentSpawns: {},
+    toolCalls: {},
+    lastClosed: null,
+  }))
+  return
+}
+
+// Bookkeeping when a turn ends: closes its spans, writes its file, notifies listeners.
+export async function closeTurn($: Engine, cfg: Config, e: { turnId: string; agentId?: string; answer: string; durationMs: number; isAborted: boolean }): Promise<void> {
+  const s = await read($, captureState)
+
+  if (e.agentId) {
+    const root = s.turnRoots[e.turnId]
+    if (root) {
+      await withMain($, turn => {
+        turn.set(root, { 'gen_ai.output.messages': assistantMessage(e.answer) })
+        turn.close(root, now(), e.isAborted ? { code: 'ERROR', message: 'aborted' } : { code: 'OK' })
+      })
+    }
+    return
+  }
+
+  if (s.mainTurnId === e.turnId) {
+    await finishMain(
+      $,
+      cfg,
+      {
+        status: e.isAborted ? 'ERROR' : 'OK',
+        message: e.isAborted ? 'aborted' : undefined,
+        answer: e.answer,
+        durationMs: e.durationMs,
+        isAborted: e.isAborted,
+        closeOpenWith: e.isAborted ? 'aborted' : 'unfinished',
+      },
+      listeners,
+    )
+  }
+  return
+}
+
+export function registerCapture(on: On, cfg: Config): void {
   on('agent.spawn', async ($, e, next) => {
     const result = await next(e)
     if (result.agentId) {
@@ -323,38 +352,6 @@ export function registerCapture(on: On, cfg: Config): CaptureApi {
     return result
   }).catch(fallThrough)
 
-  on('turn.complete', async ($, e, next) => {
-    const s = await read($, captureState)
-
-    if (e.agentId) {
-      const root = s.turnRoots[e.turnId]
-      if (root) {
-        await withMain($, turn => {
-          turn.set(root, { 'gen_ai.output.messages': assistantMessage(e.answer) })
-          turn.close(root, now(), e.isAborted ? { code: 'ERROR', message: 'aborted' } : { code: 'OK' })
-        })
-      }
-      return next(e)
-    }
-
-    if (s.mainTurnId === e.turnId) {
-      await finishMain(
-        $,
-        cfg,
-        {
-          status: e.isAborted ? 'ERROR' : 'OK',
-          message: e.isAborted ? 'aborted' : undefined,
-          answer: e.answer,
-          durationMs: e.durationMs,
-          isAborted: e.isAborted,
-          closeOpenWith: e.isAborted ? 'aborted' : 'unfinished',
-        },
-        listeners,
-      )
-    }
-    return next(e)
-  }).catch(fallThrough)
-
   on('session.end', async ($, e, next) => {
     const s = await read($, captureState)
     if (s.main) {
@@ -367,36 +364,39 @@ export function registerCapture(on: On, cfg: Config): CaptureApi {
     }
     return next(e)
   }).catch(fallThrough)
+}
 
-  return {
-    onTurnClosed(cb) {
-      listeners.push(cb)
-    },
-    async addSpan($, turnId, name, attributes) {
-      const s = await read($, captureState)
-      const sid = await $.session.id()
-      const at = now()
+// Adds a closed span to a turn: the open main turn, or the closed turn kept for a later note.
+// Writes the turn's file again, with the same sequence number.
+export async function addSpan(
+  $: Engine,
+  cfg: Config,
+  turnId: string,
+  name: string,
+  attributes: Record<string, unknown>,
+): Promise<boolean> {
+  const s = await read($, captureState)
+  const sid = await $.session.id()
+  const at = now()
 
-      if (s.main && s.mainTurnId === turnId) {
-        const turn = TurnSpans.from(s.main)
-        const parent = s.turnRoots[turnId] ?? null
-        const spanId = turn.open(name, 'INTERNAL', parent, attributes, at)
-        turn.close(spanId, at)
-        await update($, captureState, cur => ({ ...cur, main: turn.toJSON() }))
-        return true
-      }
-
-      if (s.lastClosed && s.lastClosed.turnId === turnId) {
-        const turn = TurnSpans.from(s.lastClosed.turn)
-        const spanId = turn.open(name, 'INTERNAL', s.lastClosed.root, attributes, at)
-        turn.close(spanId, at)
-        await update($, captureState, cur => ({
-          ...cur,
-          lastClosed: cur.lastClosed ? { ...cur.lastClosed, turn: turn.toJSON() } : null,
-        }))
-        return writeTurn(sinkIo($), cfg, sid, s.lastClosed.seq, turnId, turn.finished())
-      }
-      return false
-    },
+  if (s.main && s.mainTurnId === turnId) {
+    const turn = TurnSpans.from(s.main)
+    const parent = s.turnRoots[turnId] ?? null
+    const spanId = turn.open(name, 'INTERNAL', parent, attributes, at)
+    turn.close(spanId, at)
+    await update($, captureState, cur => ({ ...cur, main: turn.toJSON() }))
+    return true
   }
+
+  if (s.lastClosed && s.lastClosed.turnId === turnId) {
+    const turn = TurnSpans.from(s.lastClosed.turn)
+    const spanId = turn.open(name, 'INTERNAL', s.lastClosed.root, attributes, at)
+    turn.close(spanId, at)
+    await update($, captureState, cur => ({
+      ...cur,
+      lastClosed: cur.lastClosed ? { ...cur.lastClosed, turn: turn.toJSON() } : null,
+    }))
+    return writeTurn(sinkIo($), cfg, sid, s.lastClosed.seq, turnId, turn.finished())
+  }
+  return false
 }

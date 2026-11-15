@@ -36,11 +36,46 @@ export type CaptureState = {
   lastClosed: { turnId: string; seq: number; root: string; turn: StoredTurn } | null
 }
 
+export type Dimension = 'altitude' | 'depth' | 'range'
+
+export type Technique =
+  | 'goal-beyond-the-goal'
+  | 'durable-workflow'
+  | 'insist-on-instruments'
+  | 'unreasonable-goal'
+  | 'challenge-assumptions'
+  | 'produce-new-knowledge'
+  | 'outside-judge'
+  | 'nouns-to-verbs'
+  | 'assemble-the-crew'
+
+export type Score = 0 | 1 | 2 | 3
+
+export type Assessment = {
+  warranted: boolean
+  scores: Record<Dimension, Score>
+  evidence: Record<Dimension, string>
+  opportunity: Dimension
+  technique: Technique
+  nudge: string
+  rewrite: string
+}
+
+export type Backoff = {
+  offered: Technique | null
+  declines: Partial<Record<Technique, number>>
+}
+
+export type PendingAssess = { prompt: string; assessment: Assessment | null } | null
+
 declare module 'claude-code' {
   interface PluginState {
     handhold: {
       sinkWarned: Shaped<boolean>
       capture: Shaped<CaptureState>
+      backoff: Shaped<Backoff>
+      recent: Shaped<Assessment[]>
+      pendingAssess: Shaped<PendingAssess>
     }
   }
 }

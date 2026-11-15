@@ -1,18 +1,7 @@
-import { DIMENSIONS, TECHNIQUES } from './rubric'
-import type { Dimension, Technique } from './rubric'
-import { RUBRIC_VERSION } from './rubric'
+import type { Assessment, Dimension, Score, Technique } from '../../types'
+import { DIMENSIONS, RUBRIC_VERSION, TECHNIQUES } from './rubric'
 
-export type Score = 0 | 1 | 2 | 3
-
-export type Assessment = {
-  warranted: boolean
-  scores: Record<Dimension, Score>
-  evidence: Record<Dimension, string>
-  opportunity: Dimension
-  technique: Technique
-  nudge: string
-  rewrite: string
-}
+export type { Assessment, Dimension, Score, Technique }
 
 const isScore = (v: unknown): v is Score => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 3
 const isDimension = (v: unknown): v is Dimension => (DIMENSIONS as readonly unknown[]).includes(v)
