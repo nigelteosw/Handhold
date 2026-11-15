@@ -173,8 +173,38 @@ async function openInBrowser($: Engine, path: string): Promise<boolean> {
   return false
 }
 
-// /handhold history [session|week|all]: writes a local page of past turns and opens it. No model calls.
-// The page stays live: later turns and reviews rewrite its data file, and it picks them up in place.
+const RECENT_IN_CHAT = 5
+const short = (s: string, n: number): string => {
+  const one = s.replace(/\s+/g, ' ').trim()
+  return one.length > n ? `${one.slice(0, n)}…` : one
+}
+
+// What came of a turn, in words rather than rubric numbers.
+const outcome = (t: HistoryTurn): string => {
+  if (!t.assess) return 'not scored'
+  if (!t.assess.warranted) return 'no coaching needed'
+  return `to work on: ${t.assess.techniqueLabel}`
+}
+
+// The history in a few lines, for the chat itself: shown wherever the command runs, so it is
+// useful even where no browser can open the page (the desktop app, a remote or sandboxed session).
+export function historySummary(turns: HistoryTurn[], scopeLabel: string): string {
+  if (turns.length === 0) return `${scopeLabel}: no turns recorded yet.`
+  const newest = [...turns].sort((a, b) => b.startMs - a.startMs)
+  const scored = turns.filter(t => t.assess).length
+  const lines = [`${scopeLabel}: ${turns.length} turn${turns.length === 1 ? '' : 's'}, ${scored} scored.`]
+
+  const coached = newest.find(t => t.assess?.warranted && t.assess.rewrite)
+  if (coached?.assess) {
+    lines.push('', `Latest suggestion, for "${short(coached.prompt, 120)}":`, `Try: ${coached.assess.rewrite}`)
+  }
+  lines.push('', 'Recent turns:')
+  for (const t of newest.slice(0, RECENT_IN_CHAT)) lines.push(`- "${short(t.prompt, 80)}" · ${outcome(t)}`)
+  return lines.join('\n')
+}
+
+// /handhold history [session|week|all]: writes a local page of past turns, opens it, and sums it up
+// in the chat. No model calls. The page stays live: later turns and reviews rewrite its data file.
 export async function historyCmd($: Engine, cfg: Config, args: string): Promise<{ text: string }> {
   const now = Date.now()
   const word = wordOf(args)
@@ -186,8 +216,10 @@ export async function historyCmd($: Engine, cfg: Config, args: string): Promise<
   await $.fs.write(p.data, historyDataJs(payload))
   await $.fs.write(p.live, JSON.stringify(live))
   const opened = await openInBrowser($, p.page)
-  const n = payload.turns.length
   const unscored = payload.turns.filter(t => !t.assess).length
-  const hint = unscored > 0 ? ` ${unscored} not scored yet: /handhold review scores them.` : ''
-  return { text: `${opened ? 'Opened' : 'Wrote'} ${p.page} (${n} turns, ${payload.scope.toLowerCase()}). It updates live while open.${hint}` }
+  const page = opened
+    ? `Opened the full page in your browser (${p.page}). It updates live while open.`
+    : `The full page is at ${p.page}. No browser could be opened from here: open that file on the machine that ran this.`
+  const hint = unscored > 0 ? `${unscored} not scored yet: /handhold review scores them.` : ''
+  return { text: [historySummary(payload.turns, payload.scope), page, hint].filter(Boolean).join('\n\n') }
 }
