@@ -1,0 +1,56 @@
+{
+  "name": "handhold",
+  "version": "0.1.0",
+  "description": "A mentor that nudges you and Claude toward more ambitious work: altitude, depth, range.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "fastModel": {
+      "type": "string",
+      "default": "claude-haiku-5-5",
+      "description": "Model for the pre-send judge",
+      "title": "Pre-send judge model"
+    },
+    "fullModel": {
+      "type": "string",
+      "default": "claude-opus-5-5",
+      "description": "Model for the post-answer judge and reviews",
+      "title": "Post-answer judge model"
+    },
+    "preTimeoutMs": {
+      "type": "number",
+      "default": 2000,
+      "description": "Budget for the pre-send judge, in ms",
+      "title": "Pre-send judge timeout (ms)"
+    },
+    "postTimeoutMs": {
+      "type": "number",
+      "default": 20000,
+      "description": "Budget for the post-answer judge, in ms",
+      "title": "Post-answer judge timeout (ms)"
+    },
+    "redact": {
+      "type": "string",
+      "default": "none",
+      "options": [
+        "none",
+        "tool-results",
+        "all-tool-io"
+      ],
+      "description": "What to strip from traces",
+      "title": "Redact trace content"
+    },
+    "noteEvery": {
+      "type": "number",
+      "default": 3,
+      "description": "Show at most one coaching note per this many turns",
+      "title": "Coaching note frequency (turns)"
+    },
+    "traceRoot": {
+      "type": "string",
+      "default": "~/.handhold/traces",
+      "description": "Where trace files are written",
+      "title": "Trace folder"
+    }
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "lib": [
+      "ES2022"
+    ],
+    "types": [],
+    "jsx": "react",
+    "jsxFactory": "h"
+  },
+  "files": [
+    "./types/vendor/claude-code.d.ts",
+    "./types/index.d.ts"
+  ],
+  "include": [
+    "hooks",
+    "src",
+    "test"
+  ]
+}
