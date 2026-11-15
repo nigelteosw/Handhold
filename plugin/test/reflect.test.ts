@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Assessment, Technique } from '../types'
 import { aggregate, readTurns } from '../src/reflect/read'
 import { progressReport, toOtlp } from '../src/reflect/export'
+import { recordDay } from '../src/reflect/stats'
 import type { ReadIo, TurnRecord } from '../src/reflect/read'
 import { defaultConfig } from './helpers'
 
@@ -190,4 +191,95 @@ test('/handhold export with no flags writes the OTLP file and the report', async
   expect(writes.length).toBe(2)
   expect(writes[0].startsWith('/home/t/.handhold/exports/otlp-')).toBe(true)
   expect(writes[1].startsWith('/home/t/.handhold/exports/report-')).toBe(true)
+})
+
+const PANE = {
+  plugin: 'handhold',
+  component: 'Pane',
+  requestId: 'handhold',
+  props: {
+    title: 'Handhold',
+    isFocused: false,
+    bodyColumns: 40,
+    placement: 'dock',
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+} as const
+
+const judgeJson = (altitude: number, technique: Technique = 'goal-beyond-the-goal') =>
+  JSON.stringify({
+    warranted: true,
+    scores: { altitude, depth: 3, range: 3 },
+    evidence: { altitude: 'a', depth: 'd', range: 'r' },
+    opportunity: 'altitude',
+    technique,
+    nudge: 'n',
+    rewrite: 'the more ambitious version',
+  })
+
+// The engine's bottom for a pane test: the model answers from `reply`, store is empty, nothing else needed.
+const paneBottom = (on: Parameters<Parameters<typeof test>[1]>[1], reply: (prompt: string) => string) => {
+  on('env.get', () => ({ value: '/home/t' }))
+  on('session.id', () => ({ value: 's1' }))
+  on('ui.log', () => ({ value: undefined }))
+  on('store.get', () => ({ value: undefined }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.write', () => ({ value: undefined }))
+  on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('model.complete', (_, e) => ({ value: { isAnswered: true, text: reply(e.prompt), usage: { input_tokens: 1, output_tokens: 1, model: e.model } } }))
+}
+
+test('the pane says so when no turn has been assessed', async ($, on) => {
+  paneBottom(on, () => '{"warranted":false}')
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    expect((await ui.find({ type: 'Text', text: /No assessed turns yet/ }))?.text).toBe('No assessed turns yet.')
+    await ui.unmount()
+  }
+})
+
+test('the pane averages the session post-answer scores', async ($, on) => {
+  paneBottom(on, prompt => (prompt.includes('Request:\nAlpha') ? judgeJson(1) : judgeJson(3)))
+
+  await $.prompt.submit({ text: 'Alpha: plan the whole quarterly review for the board' } as never)
+  await $.turn.start({ text: 'Alpha: plan the whole quarterly review for the board', turnId: 't1' } as never)
+  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 1, isAborted: false } as never)
+  await $.prompt.submit({ text: 'Beta: design a better way to run the quarterly review' } as never)
+  await $.turn.start({ text: 'Beta: design a better way to run the quarterly review', turnId: 't2' } as never)
+  await $.turn.complete({ turnId: 't2', answer: 'ok', durationMs: 1, isAborted: false } as never)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    const row = await ui.find({ type: 'Text', text: /Altitude/ })
+    expect(row?.text.includes('2.0')).toBe(true)
+    await ui.unmount()
+  }
+})
+
+test('the pane shows the techniques being backed off', async ($, on) => {
+  paneBottom(on, () => judgeJson(1))
+
+  await $.prompt.submit({ text: 'Plan the whole quarterly review for the board' } as never)
+  await $.prompt.submit({ text: 'Also list the three competitors we lost to last year, with reasons' } as never)
+  await $.prompt.submit({ text: 'And then summarise the churn trend for the board deck' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /Backing off/ }))?.text).toBe('Backing off: goal-beyond-the-goal')
+  await ui.unmount()
+})
+
+test('recordDay ignores a turn that was not warranted', () => {
+  const none = recordDay([], '2026-11-15', {
+    warranted: false,
+    scores: { altitude: 3, depth: 3, range: 3 },
+    evidence: { altitude: '', depth: '', range: '' },
+    opportunity: 'altitude',
+    technique: 'goal-beyond-the-goal',
+    nudge: '',
+    rewrite: '',
+  })
+  expect(none.length).toBe(0)
 })

@@ -5,6 +5,7 @@ import { attachAssess, nudgePrompt, registerNudge } from '../src/nudge/hooks'
 import { noteText } from '../src/nudge/note'
 import { postAssess, throttle } from '../src/nudge/note'
 import { readConfig } from '../src/shared/config'
+import { drawPane, PANE_ID } from '../src/reflect/pane'
 import { registerCommands } from '../src/shared/commands'
 import { fallThrough } from '../src/shared/safe'
 
@@ -16,6 +17,8 @@ export const register: Register = (on, options) => {
   registerNudge(on)
 
   registerCommands(on, cfg)
+
+  on('ui.render', { component: 'Pane', requestId: PANE_ID }, ($, e) => drawPane($, e))
 
   on('prompt.submit', async ($, e, next) => {
     await recordPrompt($, e)

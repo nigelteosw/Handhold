@@ -8,6 +8,7 @@ import { assessAttrs, needsNudge } from '../mentor/assessment'
 import { judge } from '../mentor/judge'
 import type { Config } from '../shared/config'
 import { recentAssessments, recordAssessment } from './hooks'
+import { recordSessionStat } from '../reflect/pane'
 
 // Shape tags let a reload drop values that an older version stored in another form.
 export const quietState = atom({ plugin: 'handhold', key: 'quiet' } as const, false, { shape: 'quiet-1' })
@@ -62,6 +63,11 @@ export async function postAssess($: Engine, cfg: Config, t: ClosedTurn): Promise
   )
   if (a) {
     await recordAssessment($, a)
+    try {
+      await recordSessionStat($, a)
+    } catch {
+      // The averages are a side effect: their failure never costs the note or the span.
+    }
     await addSpan($, cfg, t.turnId, 'handhold.assess', assessAttrs(a, 'post'))
   }
   return a

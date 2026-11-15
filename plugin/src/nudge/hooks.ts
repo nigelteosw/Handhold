@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Engine, On } from 'claude-code'
 
-import type { Assessment, Backoff, PendingAssess } from '../../types'
+import type { Assessment, Backoff, PendingAssess, Technique } from '../../types'
 import { addSpan } from '../capture/hooks'
 import { assessAttrs, needsNudge } from '../mentor/assessment'
 import { isTrivial } from '../mentor/gate'
@@ -71,4 +71,10 @@ export async function recentAssessments($: Engine): Promise<Assessment[]> {
 
 export async function recordAssessment($: Engine, a: Assessment): Promise<void> {
   await update($, recentState, list => [...list, a].slice(-5))
+}
+
+// The techniques the person has declined twice this session: shown on the progress pane.
+export async function suppressedTechniques($: Engine): Promise<Technique[]> {
+  const b = await read($, backoffState)
+  return (Object.keys(b.declines) as Technique[]).filter(t => isSuppressed(b, t))
 }

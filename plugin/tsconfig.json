@@ -5,9 +5,20 @@
     "moduleResolution": "bundler",
     "strict": true,
     "noEmit": true,
-    "lib": ["ES2022"],
-    "types": []
+    "lib": [
+      "ES2022"
+    ],
+    "types": [],
+    "jsx": "react",
+    "jsxFactory": "h"
   },
-  "files": ["./types/vendor/claude-code.d.ts", "./types/index.d.ts"],
-  "include": ["hooks", "src", "test"]
+  "files": [
+    "./types/vendor/claude-code.d.ts",
+    "./types/index.d.ts"
+  ],
+  "include": [
+    "hooks",
+    "src",
+    "test"
+  ]
 }

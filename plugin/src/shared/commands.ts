@@ -2,6 +2,7 @@ import type { Engine, On } from 'claude-code'
 
 import type { Config } from './config'
 import { exportCmd } from '../reflect/export'
+import { openPane } from '../reflect/pane'
 import { review } from '../reflect/review'
 import { setQuiet } from '../nudge/note'
 import { fallThrough } from './safe'
@@ -21,7 +22,7 @@ export async function route($: Engine, cfg: Config, args: string): Promise<{ tex
   }
   if (word === 'review') return review($, cfg, tail)
   if (word === 'export') return exportCmd($, cfg, tail)
-  if (word === 'pane') return { text: 'Not available yet.' }
+  if (word === 'pane') return openPane($)
   return { text: USAGE }
 }
 

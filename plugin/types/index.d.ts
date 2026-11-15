@@ -78,6 +78,7 @@ declare module 'claude-code' {
       pendingAssess: Shaped<PendingAssess>
       quiet: Shaped<boolean>
       turnsSinceNote: Shaped<number>
+      sessionStats: Shaped<Record<Dimension, { n: number; sum: number }>>
     }
   }
 }
