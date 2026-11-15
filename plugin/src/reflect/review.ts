@@ -5,7 +5,7 @@ import { techniqueLabel } from '../mentor/rubric'
 import { judgeBatch } from '../mentor/judge'
 import { recordSessionStat } from './pane'
 import { aggregate, readIo, readTraceFiles, turnsOf } from './read'
-import type { Aggregate, TurnRecord } from './read'
+import type { Aggregate, ReadIo, Scope, TurnRecord } from './read'
 import { scoreUnscored } from './score'
 
 const DAY_MS = 7 * 24 * 60 * 60 * 1000
@@ -46,15 +46,10 @@ export function scoringLine(scored: number, left: number): string {
   return `Scored ${scored} new turn${scored === 1 ? '' : 's'}.${more}`
 }
 
-// /handhold review [session|week]: scores the unscored turns in scope in one cheap batch call, then asks
-// the review model for a reflection. These are the only model calls Handhold makes in review mode.
-export async function review($: Engine, cfg: Config, args: string): Promise<{ text: string }> {
-  const io = readIo($)
-  const sessionId = await $.session.id()
-  const scope = args.trim() === 'week' ? { sinceMs: Date.now() - 7 * DAY_MS } : { sessionId }
+// Scores the unscored turns in one scope and records them on the pane. Returns the trace files and what was scored.
+async function scoreScope($: Engine, cfg: Config, io: ReadIo, sessionId: string, scope: Scope) {
   const files = await readTraceFiles(io, cfg, scope)
-  if (files.length === 0) return { text: 'No turns recorded yet.' }
-
+  if (files.length === 0) return { files, scored: 0, left: 0 }
   const { scored, left } = await scoreUnscored(
     { ...io, write: (path, text) => $.fs.write(path, text) },
     cfg,
@@ -68,11 +63,43 @@ export async function review($: Engine, cfg: Config, args: string): Promise<{ te
       // The pane's averages are a side effect: their failure never costs the review.
     }
   }
-  const header = scoringLine(scored.length, left)
-  const withHeader = (body: string) => (header ? `${header}\n\n${body}` : body)
+  return { files, scored: scored.length, left }
+}
 
-  const agg = aggregate(turnsOf(files))
-  if (agg.warranted === 0) return { text: withHeader('No scored turns to reflect on yet.') }
+export const SESSION_FALLBACK = 'Nothing in this session needed coaching, so this review covers the last 7 days.'
+export const NOTHING_IN_SESSION =
+  'Nothing in this session needed coaching: Handhold skips commands, quick questions and chores. Run /handhold review week to look across sessions.'
+export const NOTHING_IN_WEEK =
+  'Nothing in the last 7 days needed coaching yet: Handhold skips commands, quick questions and chores. It has the most to say about planning, analysis, writing and design work, so try it on some of that and review again.'
+
+// /handhold review [session|week]: scores the unscored turns in scope in one cheap batch call, then asks
+// the review model for a reflection. These are the only model calls Handhold makes in review mode.
+// With no argument it reviews this session, and falls back to the last 7 days when nothing here needed coaching.
+export async function review($: Engine, cfg: Config, args: string): Promise<{ text: string }> {
+  const io = readIo($)
+  const sessionId = await $.session.id()
+  const word = args.trim()
+  const weekScope = { sinceMs: Date.now() - DAY_MS }
+
+  let isWeek = word === 'week'
+  let run = await scoreScope($, cfg, io, sessionId, isWeek ? weekScope : { sessionId })
+  let agg = aggregate(turnsOf(run.files))
+  const notes: string[] = []
+
+  if (!isWeek && word === '' && agg.warranted === 0) {
+    const first = scoringLine(run.scored, run.left)
+    if (first) notes.push(first)
+    isWeek = true
+    run = await scoreScope($, cfg, io, sessionId, weekScope)
+    agg = aggregate(turnsOf(run.files))
+    if (agg.warranted > 0) notes.push(SESSION_FALLBACK)
+  }
+  const line = scoringLine(run.scored, run.left)
+  if (line) notes.push(line)
+  const withHeader = (body: string) => [...notes, body].join('\n\n')
+
+  if (run.files.length === 0 && notes.length === 0) return { text: 'No turns recorded yet.' }
+  if (agg.warranted === 0) return { text: withHeader(isWeek ? NOTHING_IN_WEEK : NOTHING_IN_SESSION) }
   try {
     const reply = await $.model.complete({
       model: cfg.reviewModel,

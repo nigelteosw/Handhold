@@ -40,7 +40,7 @@ For sessions that cannot take a flag (for example the desktop app), set `CLAUDE_
 
 | Command | What it does |
 |---|---|
-| `/handhold review [session\|week]` | Scores the turns in scope that haven't been scored yet (one Haiku call), then reflects on them (one Opus call): patterns, best moments, three before-and-after rewrites, and the trend. Defaults to this session; `week` covers the last 7 days across sessions. |
+| `/handhold review [session\|week]` | Scores the turns in scope that haven't been scored yet (one Haiku call), then reflects on them (one Opus call): patterns, best moments, three before-and-after rewrites, and the trend. Defaults to this session, and falls back to the last 7 days when nothing in the session needed coaching; `week` covers the last 7 days across sessions. |
 | `/handhold history [session\|week\|all]` | Writes a local page of your past turns to `~/.handhold/history.html` and opens it in your browser: prompts, answers, tools used, tokens and any scores, with search and filters. Defaults to the last 30 days. Makes no model calls. |
 | `/handhold pane` | Opens the progress pane: session and 7-day averages per dimension, and any techniques Handhold has stopped offering. In review mode it fills in after each `/handhold review`. |
 | `/handhold export [--otlp] [--report [path]]` | Writes an OTLP JSON file of the last 7 days of traces, and a Markdown progress report (scores and short before-and-after pairs, no transcripts) you can share. With no flags it writes both. |

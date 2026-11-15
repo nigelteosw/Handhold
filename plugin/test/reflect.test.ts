@@ -5,6 +5,7 @@ import { aggregate, readTurns } from '../src/reflect/read'
 import { progressReport, toOtlp } from '../src/reflect/export'
 import { recordDay } from '../src/reflect/stats'
 import type { ReadIo, TurnRecord } from '../src/reflect/read'
+import { NOTHING_IN_SESSION, NOTHING_IN_WEEK, SESSION_FALLBACK } from '../src/reflect/review'
 import { defaultConfig } from './helpers'
 import type { KitOn } from './helpers'
 
@@ -283,4 +284,70 @@ test('recordDay ignores a turn that was not warranted', () => {
     rewrite: '',
   })
   expect(none.length).toBe(0)
+})
+
+// Two sessions on disk: s1 (the current one) and s2. Each has one judged turn; `warranted` says which needed coaching.
+const twoSessions = (on: KitOn, warranted: { s1: boolean; s2: boolean }) => {
+  const turnFile = (prompt: string, isWarranted: boolean) => {
+    const root = JSON.stringify({
+      spanId: 'b'.repeat(16),
+      name: 'invoke_agent claude',
+      startTimeUnixNano: '1000000000000',
+      attributes: { 'gen_ai.input.messages': [{ role: 'user', parts: [{ type: 'text', content: prompt }] }] },
+    })
+    const assess = JSON.stringify({
+      spanId: 'c'.repeat(16),
+      name: 'handhold.assess',
+      startTimeUnixNano: '1000000000000',
+      attributes: {
+        'handhold.judge.phase': 'post',
+        'handhold.warranted': isWarranted,
+        'handhold.score.altitude': isWarranted ? 1 : 3,
+        'handhold.score.depth': isWarranted ? 0 : 3,
+        'handhold.score.range': isWarranted ? 0 : 3,
+        'handhold.opportunity': 'altitude',
+        'handhold.technique': 'goal-beyond-the-goal',
+        'handhold.rewrite': 'the three decisions',
+      },
+    })
+    return `${root}\n${assess}\n`
+  }
+  on('env.get', () => ({ value: '/home/t' }))
+  on('session.id', () => ({ value: 's1' }))
+  on('ui.log', () => ({ value: undefined }))
+  on('fs.list', (_, e) => ({
+    value: e.path.endsWith('/traces')
+      ? ['s1', 's2'].map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false }))
+      : [{ name: '00001-t1.jsonl', kind: 'file', size: 0, mtimeMs: Date.now(), isLink: false }],
+  }))
+  on('fs.read', (_, e) => ({
+    value: e.path.includes('/s1/') ? turnFile('bump the version please', warranted.s1) : turnFile('plan the qbr', warranted.s2),
+  }))
+  on('model.complete', () => {
+    throw new Error('timeout')
+  })
+}
+
+const runReview = async ($: never, args: string) =>
+  ((await ($ as { command: { run(x: unknown): Promise<unknown> } }).command.run({
+    command: 'handhold',
+    args: `review ${args}`.trim(),
+    origin: { kind: 'composer' },
+  })) as { text: string }).text
+
+test('review falls back to the week when nothing in this session needed coaching', async ($, on) => {
+  twoSessions(on, { s1: false, s2: true })
+  const text = await runReview($ as never, '')
+  expect(text).toContain(SESSION_FALLBACK)
+  expect(text).toContain('Altitude')
+})
+
+test('review says why when nothing in the week needed coaching either', async ($, on) => {
+  twoSessions(on, { s1: false, s2: false })
+  expect(await runReview($ as never, '')).toContain(NOTHING_IN_WEEK)
+})
+
+test('an explicit session review does not fall back, and points at week', async ($, on) => {
+  twoSessions(on, { s1: false, s2: true })
+  expect(await runReview($ as never, 'session')).toContain(NOTHING_IN_SESSION)
 })

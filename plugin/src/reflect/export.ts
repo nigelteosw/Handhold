@@ -32,7 +32,7 @@ export function toOtlp(spans: Span[]): object {
         resource: { attributes: [{ key: 'service.name', value: { stringValue: 'handhold' } }] },
         scopeSpans: [
           {
-            scope: { name: 'handhold', version: '0.2.0' },
+            scope: { name: 'handhold', version: '0.2.1' },
             spans: spans.map(s => ({
               traceId: s.traceId,
               spanId: s.spanId,
